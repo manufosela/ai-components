@@ -1,0 +1,66 @@
+{
+  "name": "@manufosela/ai-components",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo of @manufosela AI web components built with Lit, powered by Chrome Built-in AI with pluggable fallback adapters.",
+  "type": "module",
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/*\" run build",
+    "build:types": "pnpm -r --filter \"./packages/*\" run build:types",
+    "test": "pnpm -r --filter \"./packages/*\" run test",
+    "test:watch": "pnpm -r --filter \"./packages/*\" run test:watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"packages/*/src/**/*.{ts,js}\" \"packages/*/test/**/*.{ts,js}\"",
+    "lint:fix": "pnpm lint --fix",
+    "format": "prettier --write \"packages/**/*.{ts,js,json,md}\" \"apps/**/*.{ts,js,astro,json,md}\" \"*.{json,md,yml}\"",
+    "format:check": "prettier --check \"packages/**/*.{ts,js,json,md}\" \"apps/**/*.{ts,js,astro,json,md}\" \"*.{json,md,yml}\"",
+    "site:dev": "pnpm --dir apps/site dev",
+    "site:build": "pnpm --dir apps/site build",
+    "site:preview": "pnpm --dir apps/site preview",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "lit",
+    "web-components",
+    "ai",
+    "chrome-ai",
+    "gemini-nano",
+    "prompt-api",
+    "monorepo"
+  ],
+  "author": {
+    "name": "Mánu Fosela",
+    "email": "mjfosela@gmail.com",
+    "url": "https://github.com/manufosela"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/manufosela/ai-components#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manufosela/ai-components.git"
+  },
+  "bugs": {
+    "url": "https://github.com/manufosela/ai-components/issues"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.1",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.0.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,7 @@
+node_modules
+dist
+build
+coverage
+.astro
+pnpm-lock.yaml
+CHANGELOG.md
