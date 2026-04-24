@@ -1,0 +1,64 @@
+{
+  "name": "@manufosela/ai-form",
+  "version": "0.1.0",
+  "description": "<ai-form> web component: wraps a <form>, progressively enhances it with Chrome Built-in AI (fill-from-text, semantic validation, voice I/O) when available. 100% JavaScript + JSDoc.",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./ai-form": {
+      "types": "./dist/types/ai-form.d.ts",
+      "import": "./src/ai-form.js"
+    }
+  },
+  "files": [
+    "src",
+    "dist/types",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm run build:types",
+    "build:types": "tsc -p tsconfig.types.json",
+    "test": "vitest run --config ../../vitest.config.js --dir test",
+    "test:watch": "vitest --config ../../vitest.config.js --dir test"
+  },
+  "dependencies": {
+    "@manufosela/ai-core": "workspace:*",
+    "lit": "^3.2.0"
+  },
+  "devDependencies": {
+    "@manufosela/ai-testing": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "lit",
+    "web-components",
+    "ai-form",
+    "chrome-ai",
+    "prompt-api",
+    "form",
+    "progressive-enhancement"
+  ],
+  "author": {
+    "name": "Mánu Fosela",
+    "email": "mjfosela@gmail.com",
+    "url": "https://github.com/manufosela"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/manufosela/ai-components/tree/main/packages/ai-form#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manufosela/ai-components.git",
+    "directory": "packages/ai-form"
+  },
+  "bugs": {
+    "url": "https://github.com/manufosela/ai-components/issues"
+  }
+}
