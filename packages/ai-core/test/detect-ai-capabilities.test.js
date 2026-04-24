@@ -132,6 +132,25 @@ describe('detectAICapabilities()', () => {
     expect(caps.speechOut).toBe(true);
   });
 
+  it('accepts class/constructor-shaped globals (typeof === "function") — regression for AIC-BUG-0001', async () => {
+    // Chrome exposes LanguageModel/Writer/Summarizer/Translator as CLASSES,
+    // i.e. typeof === 'function' with a static availability() method.
+    class FakeLanguageModel {
+      static async availability() {
+        return 'available';
+      }
+    }
+    function FakeWriter() {}
+    FakeWriter.availability = async () => 'downloadable';
+
+    /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = FakeLanguageModel;
+    /** @type {Record<string, unknown>} */ (globalThis).Writer = FakeWriter;
+
+    const caps = await detectAICapabilities();
+    expect(caps.prompt).toBe('available');
+    expect(caps.writer).toBe('downloadable');
+  });
+
   it('never throws, even if a global is a weird value', async () => {
     /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = null;
     /** @type {Record<string, unknown>} */ (globalThis).Writer = 42;

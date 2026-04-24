@@ -161,8 +161,16 @@ export class AIForm extends VoiceMixin(AIElement) {
       border-color: var(--ai-form-status-info, #0a7aca);
     }
     .ai-status[data-state='unsupported'] {
-      border-color: var(--ai-form-status-muted, rgba(0, 0, 0, 0.2));
-      color: var(--ai-form-status-muted-fg, rgba(0, 0, 0, 0.6));
+      /* Inherit text color so we follow the host theme (light/dark).
+         Hardcoding rgba(0,0,0,*) made the message invisible on dark bg.
+         Fade border/text relative to currentColor instead. Overridable
+         via CSS custom props. */
+      color: var(--ai-form-status-muted-fg, color-mix(in srgb, currentColor 75%, transparent));
+      border-color: var(--ai-form-status-muted, color-mix(in srgb, currentColor 25%, transparent));
+    }
+    .ai-status[data-state='unsupported'] a {
+      color: inherit;
+      text-decoration: underline;
     }
     .ai-status progress {
       flex: 1;

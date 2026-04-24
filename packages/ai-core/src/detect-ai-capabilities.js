@@ -31,19 +31,19 @@ function normalizeState(raw) {
 }
 
 /**
- * Probe a Chrome AI API for its availability.
+ * Probe a Chrome AI API for its availability. Accepts either a plain object
+ * (legacy namespace shape) or a class/constructor (current Chrome shape:
+ * `LanguageModel`, `Writer`, `Summarizer`, `Translator` are classes with a
+ * static `availability()` method → `typeof === 'function'`).
  * @param {unknown} api - A candidate global like LanguageModel, Writer, Summarizer, Translator.
  * @returns {Promise<AICapabilityState>}
  */
 async function probe(api) {
-  if (
-    !api ||
-    typeof api !== 'object' ||
-    // @ts-ignore - dynamic probe
-    typeof api.availability !== 'function'
-  ) {
-    return 'unavailable';
-  }
+  if (api === null || api === undefined) return 'unavailable';
+  const t = typeof api;
+  if (t !== 'object' && t !== 'function') return 'unavailable';
+  // @ts-ignore - dynamic probe
+  if (typeof api.availability !== 'function') return 'unavailable';
   try {
     // @ts-ignore - dynamic probe
     const raw = await api.availability();
