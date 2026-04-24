@@ -23,7 +23,12 @@
       "import": "./src/speak.js"
     }
   },
-  "files": ["src", "dist/types", "README.md", "LICENSE"],
+  "files": [
+    "src",
+    "dist/types",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "pnpm run build:types",
     "build:types": "tsc -p tsconfig.types.json",

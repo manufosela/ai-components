@@ -34,7 +34,7 @@ import { speak as speakUtterance, isSpeakAvailable } from './speak.js';
 export function VoiceMixin(Base) {
   class VoiceElement extends Base {
     static properties = {
-      .../** @type {any} */ ((Base).properties ?? {}),
+      .../** @type {any} */ (Base.properties ?? {}),
       listening: { type: Boolean, attribute: false, state: true },
       speaking: { type: Boolean, attribute: false, state: true },
       speechInAvailable: { type: Boolean, attribute: false, state: true },

@@ -6,12 +6,12 @@
 
 ## What's inside
 
-| Export          | Description                                                                                                             |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `VoiceMixin`    | Factory mixin: `class MyEl extends VoiceMixin(AIElement) { … }`. Adds reactive state, methods and events for voice I/O. |
-| `listen()`      | Standalone helper. Promisified SpeechRecognition. Normalizes the `webkit` prefix.                                       |
-| `speak()`       | Standalone helper. Promisified SpeechSynthesis.                                                                         |
-| `isListenAvailable()` / `isSpeakAvailable()` | Cheap boolean capability probes for both APIs.                                              |
+| Export                                       | Description                                                                                                             |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `VoiceMixin`                                 | Factory mixin: `class MyEl extends VoiceMixin(AIElement) { … }`. Adds reactive state, methods and events for voice I/O. |
+| `listen()`                                   | Standalone helper. Promisified SpeechRecognition. Normalizes the `webkit` prefix.                                       |
+| `speak()`                                    | Standalone helper. Promisified SpeechSynthesis.                                                                         |
+| `isListenAvailable()` / `isSpeakAvailable()` | Cheap boolean capability probes for both APIs.                                                                          |
 
 ## Install
 
