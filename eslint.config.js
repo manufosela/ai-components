@@ -28,6 +28,7 @@ export default [
         Event: 'readonly',
         CSS: 'readonly',
         Node: 'readonly',
+        requestAnimationFrame: 'readonly',
         AbortController: 'readonly',
         AbortSignal: 'readonly',
         URL: 'readonly',

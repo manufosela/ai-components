@@ -32,6 +32,19 @@ function waitFor(el, name) {
   );
 }
 
+/**
+ * @param {any} el
+ * @param {string} text
+ * @returns {Promise<void>}
+ */
+async function sendChatMessage(el, text) {
+  const textarea = el.shadowRoot.querySelector('[part="chat-textarea"]');
+  textarea.value = text;
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  await el.updateComplete;
+  el.shadowRoot.querySelector('button[data-action="chat-send"]').click();
+}
+
 describe('<ai-form> conversational mode', () => {
   /** @type {Array<() => void>} */
   const cleanups = [];
@@ -41,8 +54,8 @@ describe('<ai-form> conversational mode', () => {
     document.body.innerHTML = '';
   });
 
-  describe('initial prompt', () => {
-    it('lists all required AI-candidates in the dynamic prompt (English default)', async () => {
+  describe('initial assistant message', () => {
+    it('lists all required AI-candidates in the first assistant bubble (English default)', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
 
@@ -56,15 +69,16 @@ describe('<ai-form> conversational mode', () => {
       );
       await ready(el);
 
-      const prompt = el.shadowRoot.querySelector('[part="chat-prompt"]').textContent.trim();
-      expect(prompt).toMatch(/name/);
-      expect(prompt).toMatch(/phone/);
-      // Optional (non-required) field goes into the "and optionally" branch.
-      expect(prompt).toMatch(/optionally/i);
-      expect(prompt).toMatch(/comment/);
+      const bubbles = el.shadowRoot.querySelectorAll('.msg-assistant');
+      expect(bubbles.length).toBe(1);
+      const text = bubbles[0].textContent.trim();
+      expect(text).toMatch(/name/);
+      expect(text).toMatch(/phone/);
+      expect(text).toMatch(/optionally/i);
+      expect(text).toMatch(/comment/);
     });
 
-    it('localizes the prompt when language is Spanish', async () => {
+    it('localizes the first message when language is Spanish', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
 
@@ -76,13 +90,12 @@ describe('<ai-form> conversational mode', () => {
       );
       await ready(el);
 
-      const prompt = el.shadowRoot.querySelector('[part="chat-prompt"]').textContent.trim();
-      // Singular-required branch: "¿Me dices {s}?"
-      expect(prompt).toMatch(/¿Me dices/);
-      expect(prompt).toMatch(/teléfono/);
+      const text = el.shadowRoot.querySelector('.msg-assistant').textContent.trim();
+      expect(text).toMatch(/¿me dices/i);
+      expect(text).toMatch(/teléfono/);
     });
 
-    it('includes a reminder when required MANUAL (non-ai) fields are empty', async () => {
+    it('includes a reminder for required MANUAL (non-ai) fields when they are empty', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
 
@@ -98,12 +111,10 @@ describe('<ai-form> conversational mode', () => {
       );
       await ready(el);
 
-      const prompt = el.shadowRoot.querySelector('[part="chat-prompt"]').textContent.trim();
-      // AI-ask + manual-reminder.
-      expect(prompt).toMatch(/¿Me dices/);
-      expect(prompt).toMatch(/Recuerda rellenar a mano/);
-      expect(prompt).toMatch(/Adjuntar CV/);
-      expect(prompt).toMatch(/Acepto los términos/);
+      const text = el.shadowRoot.querySelector('.msg-assistant').textContent.trim();
+      expect(text).toMatch(/teléfono/);
+      expect(text).toMatch(/Adjuntar CV/);
+      expect(text).toMatch(/Acepto los términos/);
     });
 
     it('emits ai-conversation-update with pending AI and manual field names', async () => {
@@ -127,7 +138,7 @@ describe('<ai-form> conversational mode', () => {
   });
 
   describe('extraction flow', () => {
-    it('fills matching AI-candidate inputs from a clean JSON response', async () => {
+    it('user message appears in the chat and matching AI-candidates are filled', async () => {
       const { teardown } = setupChromeAIMock({
         prompt: {
           availability: 'available',
@@ -145,15 +156,16 @@ describe('<ai-form> conversational mode', () => {
       );
       await ready(el);
 
-      const textarea = el.shadowRoot.querySelector('[part="chat-textarea"]');
-      textarea.value = 'Hola soy Manu y mi número es +34 600 000 000';
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      await el.updateComplete;
-
-      el.shadowRoot.querySelector('button[data-action="chat-check"]').click();
+      await sendChatMessage(el, 'Hola soy Manu y mi número es +34 600 000 000');
       await waitFor(el, 'ai-field-extracted');
       await el.updateComplete;
 
+      // User bubble is present in the log.
+      const userBubbles = el.shadowRoot.querySelectorAll('.msg-user');
+      expect(userBubbles.length).toBe(1);
+      expect(userBubbles[0].textContent).toMatch(/Manu/);
+
+      // Slotted inputs are filled live.
       expect(el.querySelector('[name="nombre"]').value).toBe('Manu');
       expect(el.querySelector('[name="tel"]').value).toBe('+34 600 000 000');
     });
@@ -178,11 +190,7 @@ describe('<ai-form> conversational mode', () => {
       expect(el.shadowRoot.querySelector('button[data-action="chat-submit"]')).toBeNull();
 
       // Fill the AI field via extraction → still missing the manual tos → no Submit yet.
-      const textarea = el.shadowRoot.querySelector('[part="chat-textarea"]');
-      textarea.value = '600';
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      await el.updateComplete;
-      el.shadowRoot.querySelector('button[data-action="chat-check"]').click();
+      await sendChatMessage(el, '600');
       await waitFor(el, 'ai-field-extracted');
       await el.updateComplete;
       expect(el.shadowRoot.querySelector('button[data-action="chat-submit"]')).toBeNull();
@@ -196,7 +204,7 @@ describe('<ai-form> conversational mode', () => {
       expect(el.shadowRoot.querySelector('button[data-action="chat-submit"]')).not.toBeNull();
     });
 
-    it('emits ai-no-match when the form has no ai-extract inputs', async () => {
+    it('emits ai-no-match + assistant message when the form has no ai-extract inputs', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
 
@@ -204,14 +212,14 @@ describe('<ai-form> conversational mode', () => {
       await ready(el);
 
       const noMatchP = waitFor(el, 'ai-no-match');
-      const textarea = el.shadowRoot.querySelector('[part="chat-textarea"]');
-      textarea.value = 'hola';
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      await el.updateComplete;
-      el.shadowRoot.querySelector('button[data-action="chat-check"]').click();
-
+      await sendChatMessage(el, 'hola');
       const evt = await noMatchP;
       expect(evt.detail.reason).toBe('no-extractable-inputs');
+
+      await el.updateComplete;
+      const bubbles = el.shadowRoot.querySelectorAll('.msg-assistant');
+      // The seed message + the no-match assistant reply.
+      expect(bubbles.length).toBeGreaterThanOrEqual(2);
     });
 
     it('clears stale setCustomValidity when the user edits an input', async () => {
@@ -234,7 +242,7 @@ describe('<ai-form> conversational mode', () => {
   });
 
   describe('chat UI gating by availability state', () => {
-    it('disables textarea and Check while state is downloadable', async () => {
+    it('disables textarea and Send while state is downloadable', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'downloadable' } });
       cleanups.push(teardown);
 
@@ -242,7 +250,7 @@ describe('<ai-form> conversational mode', () => {
       await ready(el);
 
       expect(el.shadowRoot.querySelector('[part="chat-textarea"]').disabled).toBe(true);
-      expect(el.shadowRoot.querySelector('button[data-action="chat-check"]').disabled).toBe(true);
+      expect(el.shadowRoot.querySelector('button[data-action="chat-send"]').disabled).toBe(true);
       expect(el.shadowRoot.querySelector('.ai-status[data-state="downloadable"]')).not.toBeNull();
     });
 
@@ -252,7 +260,6 @@ describe('<ai-form> conversational mode', () => {
 
       expect(el.aiAvailable).toBe(false);
       expect(el.shadowRoot.querySelector('.ai-chat')).toBeNull();
-      // Slotted form is still reachable.
       expect(el.querySelector('[name="x"]')).not.toBeNull();
     });
   });

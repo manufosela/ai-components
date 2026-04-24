@@ -38,7 +38,7 @@ describe('<ai-form> AI lifecycle UX', () => {
     expect(el.shadowRoot.querySelector('.ai-chat')).toBeNull();
   });
 
-  it('renders the "download" banner when Prompt is downloadable, disables chat Check button', async () => {
+  it('renders the "download" banner when Prompt is downloadable, disables chat Send button', async () => {
     const { teardown } = setupChromeAIMock({
       prompt: { availability: 'downloadable' },
     });
@@ -57,8 +57,8 @@ describe('<ai-form> AI lifecycle UX', () => {
     const textarea = el.shadowRoot.querySelector('[part="chat-textarea"]');
     expect(textarea).not.toBeNull();
     expect(textarea.disabled).toBe(true);
-    const check = el.shadowRoot.querySelector('button[data-action="chat-check"]');
-    expect(check.disabled).toBe(true);
+    const send = el.shadowRoot.querySelector('button[data-action="chat-send"]');
+    expect(send.disabled).toBe(true);
   });
 
   it('clicking Enable AI calls ensureAIReady and updates the UI to "available"', async () => {

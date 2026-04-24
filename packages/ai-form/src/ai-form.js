@@ -74,13 +74,13 @@ export class AIForm extends VoiceMixin(AIElement) {
   static properties = {
     /** BCP-47 language tag used by AI + voice features. */
     language: { type: String, reflect: true },
-    /** When present, the chat 🎤 button is enabled and uses SpeechRecognition to dictate into the chat textarea. */
+    /** When present, the chat mic is enabled and uses SpeechRecognition. */
     voiceInput: { type: Boolean, reflect: true, attribute: 'voice-input' },
     /** When present, validation failures are read aloud with SpeechSynthesis. */
     voiceOutput: { type: Boolean, reflect: true, attribute: 'voice-output' },
-    _chatText: { type: String, state: true },
+    _chatInput: { type: String, state: true },
     _chatBusy: { type: Boolean, state: true },
-    _chatPrompt: { type: String, state: true },
+    _messages: { type: Array, state: true },
     _chatComplete: { type: Boolean, state: true },
     _validating: { type: Boolean, state: true },
   };
@@ -97,8 +97,8 @@ export class AIForm extends VoiceMixin(AIElement) {
         var(--ai-form-button-border, color-mix(in srgb, currentColor 25%, transparent));
       background: var(--ai-form-button-bg, transparent);
       color: inherit;
-      padding: 0.35rem 0.75rem;
-      border-radius: 4px;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
       cursor: pointer;
       font: inherit;
     }
@@ -106,59 +106,114 @@ export class AIForm extends VoiceMixin(AIElement) {
       opacity: 0.5;
       cursor: not-allowed;
     }
-    button[data-action='chat-submit'] {
-      background: var(--ai-form-submit-bg, color-mix(in srgb, currentColor 12%, transparent));
-      font-weight: 600;
-    }
+    /* ---- chat shell ---- */
     .ai-chat {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-      padding: 0.75rem;
+      height: var(--ai-form-chat-height, 420px);
       border: 1px solid
-        var(--ai-form-chat-border, color-mix(in srgb, currentColor 20%, transparent));
-      border-radius: 6px;
+        var(--ai-form-chat-border, color-mix(in srgb, currentColor 15%, transparent));
+      border-radius: 12px;
       background: var(--ai-form-chat-bg, transparent);
+      overflow: hidden;
     }
-    .ai-chat-prompt {
-      margin: 0;
-      font-weight: 500;
-      color: inherit;
-    }
-    .ai-chat-input {
-      display: flex;
-      gap: 0.5rem;
-      align-items: flex-start;
-    }
-    .ai-chat-input textarea {
+    .ai-chat-log {
       flex: 1;
-      min-height: 4rem;
-      resize: vertical;
-      font: inherit;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      scroll-behavior: smooth;
+    }
+    .msg {
+      max-width: 85%;
+      padding: 0.6rem 0.85rem;
+      border-radius: 14px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .msg-assistant {
+      align-self: flex-start;
+      background: var(--ai-form-msg-assistant-bg, color-mix(in srgb, currentColor 8%, transparent));
+      border-bottom-left-radius: 4px;
+    }
+    .msg-user {
+      align-self: flex-end;
+      background: var(--ai-form-msg-user-bg, color-mix(in srgb, currentColor 18%, transparent));
+      border-bottom-right-radius: 4px;
+    }
+    .msg-thinking {
+      opacity: 0.7;
+      font-style: italic;
+    }
+    .ai-chat-inputbar {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.5rem;
       padding: 0.5rem;
+      border-top: 1px solid
+        var(--ai-form-chat-border, color-mix(in srgb, currentColor 15%, transparent));
+      background: var(--ai-form-chat-inputbar-bg, transparent);
+    }
+    .ai-chat-inputbar textarea {
+      flex: 1;
+      min-height: 2.4rem;
+      max-height: 8rem;
+      resize: none;
+      font: inherit;
+      padding: 0.5rem 0.75rem;
       box-sizing: border-box;
       color: inherit;
       background: var(--ai-form-chat-textarea-bg, transparent);
       border: 1px solid
-        var(--ai-form-chat-textarea-border, color-mix(in srgb, currentColor 25%, transparent));
-      border-radius: 4px;
+        var(--ai-form-chat-textarea-border, color-mix(in srgb, currentColor 20%, transparent));
+      border-radius: 20px;
+      overflow-y: auto;
     }
-    .ai-chat-mic {
+    .ai-chat-mic,
+    .ai-chat-send {
       flex: 0 0 auto;
+      width: 2.4rem;
+      height: 2.4rem;
+      padding: 0;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
     }
     .ai-chat-mic[aria-pressed='true'] {
-      background: var(--ai-form-chat-mic-active-bg, color-mix(in srgb, red 15%, transparent));
+      background: var(--ai-form-chat-mic-active-bg, color-mix(in srgb, red 18%, transparent));
     }
-    .ai-chat-actions {
+    .ai-chat-send {
+      background: var(--ai-form-chat-send-bg, color-mix(in srgb, currentColor 15%, transparent));
+    }
+    /* ---- form section (secondary) ---- */
+    .ai-form-section {
+      margin-top: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      border: 1px dashed
+        var(--ai-form-summary-border, color-mix(in srgb, currentColor 15%, transparent));
+      border-radius: 8px;
+      font-size: 0.92em;
+      opacity: 0.95;
+    }
+    .ai-form-section ::slotted(form) {
+      display: grid;
+      gap: 0.4rem;
+    }
+    .ai-form-submit-row {
       display: flex;
       justify-content: flex-end;
-      gap: 0.5rem;
-    }
-    .ai-chat-submit {
       margin-top: 0.5rem;
-      display: flex;
-      justify-content: flex-end;
+    }
+    button[data-action='chat-submit'] {
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      background: var(--ai-form-submit-bg, color-mix(in srgb, currentColor 18%, transparent));
+      font-weight: 600;
     }
     .ai-form-errors {
       margin-top: 0.5rem;
@@ -166,6 +221,7 @@ export class AIForm extends VoiceMixin(AIElement) {
     .ai-form-errors:empty {
       display: none;
     }
+    /* ---- banners (Enable AI / downloading / unsupported) ---- */
     .ai-status {
       display: flex;
       gap: 0.5rem;
@@ -173,8 +229,9 @@ export class AIForm extends VoiceMixin(AIElement) {
       flex-wrap: wrap;
       padding: 0.5rem 0.75rem;
       margin-bottom: 0.5rem;
-      border: 1px solid var(--ai-form-status-border, rgba(0, 0, 0, 0.15));
-      border-radius: 4px;
+      border: 1px solid
+        var(--ai-form-status-border, color-mix(in srgb, currentColor 20%, transparent));
+      border-radius: 6px;
       background: var(--ai-form-status-bg, transparent);
       font-size: 0.9rem;
     }
@@ -185,10 +242,6 @@ export class AIForm extends VoiceMixin(AIElement) {
       border-color: var(--ai-form-status-info, #0a7aca);
     }
     .ai-status[data-state='unsupported'] {
-      /* Inherit text color so we follow the host theme (light/dark).
-         Hardcoding rgba(0,0,0,*) made the message invisible on dark bg.
-         Fade border/text relative to currentColor instead. Overridable
-         via CSS custom props. */
       color: var(--ai-form-status-muted-fg, color-mix(in srgb, currentColor 75%, transparent));
       border-color: var(--ai-form-status-muted, color-mix(in srgb, currentColor 25%, transparent));
     }
@@ -211,27 +264,27 @@ export class AIForm extends VoiceMixin(AIElement) {
     /** @type {boolean} */
     this.voiceOutput = false;
     /** @type {string} */
-    this._chatText = '';
+    this._chatInput = '';
     /** @type {boolean} */
     this._chatBusy = false;
-    /** @type {string} */
-    this._chatPrompt = '';
+    /** @type {Array<{role: 'assistant' | 'user', text: string}>} */
+    this._messages = [];
     /** @type {boolean} */
     this._chatComplete = false;
     /** @type {boolean} */
     this._validating = false;
     /** @type {boolean} */
     this._bypassNextSubmit = false;
-    // Arrow-bound handlers so we can add/remove the same reference.
+    /** @type {string} */
+    this._lastAssistantPrompt = '';
+    /** @type {boolean} */
+    this._primed = false;
     /** @type {(e: Event) => void} */
     this._onSubmit = (event) => {
       this._handleSubmit(event);
     };
     /** @type {(e: Event) => void} */
     this._onFormInput = (event) => {
-      // Any input/change inside the slotted <form> can move us into/out
-      // of "complete" state and update the dynamic prompt. Clear any
-      // stale custom validity on the edited input (decision #2).
       const t = /** @type {HTMLElement | null} */ (event.target);
       if (
         t instanceof HTMLInputElement ||
@@ -277,58 +330,77 @@ export class AIForm extends VoiceMixin(AIElement) {
       if (this._validating) this.setAttribute('aria-busy', 'true');
       else this.removeAttribute('aria-busy');
     }
+    // Seed the chat once AI capability detection finishes and the chat UI
+    // actually mounts. `firstUpdated` runs on the first render (with
+    // aiAvailable=false), so we re-check here every time aiAvailable
+    // flips to true.
+    if (changed.has('aiAvailable') && this.aiAvailable && !this._primed) {
+      this._updateChatState();
+    }
   }
 
   /** @override */
   renderAI() {
     return html`
       ${this._renderStatusBanner()} ${this._renderChatUI()}
-      <slot></slot>
-      ${this._chatComplete
-        ? html`<div class="ai-chat-submit" part="submit-wrap">
-            <button
-              type="button"
-              data-action="chat-submit"
-              part="submit"
-              @click=${this._submitForm}
-            >
-              ${this._submitLabel()}
-            </button>
-          </div>`
-        : nothing}
+      <div class="ai-form-section" part="form-section">
+        <slot></slot>
+        ${this._chatComplete
+          ? html`<div class="ai-form-submit-row" part="submit-wrap">
+              <button
+                type="button"
+                data-action="chat-submit"
+                part="submit"
+                @click=${this._submitForm}
+              >
+                ${this._submitLabel()}
+              </button>
+            </div>`
+          : nothing}
+      </div>
       <div class="ai-form-errors" part="errors" aria-live="polite"></div>
     `;
   }
 
   /**
-   * Render the conversational chat UI: instructional prompt, free-text
-   * textarea (+ optional mic), and "Check" button. Everything is disabled
-   * until `aiReady` (model actually downloaded).
+   * Render the chat shell: scrollable message log + input bar (textarea,
+   * mic, send). Disabled until `aiReady` (model actually downloaded).
    * @returns {unknown}
    */
   _renderChatUI() {
     const ready = this.aiReady === true;
     const voiceActive = this.voiceInput && this.speechInAvailable;
-    const canCheck = ready && !this._chatBusy && this._chatText.trim().length > 0;
+    const canSend = ready && !this._chatBusy && this._chatInput.trim().length > 0;
     return html`
-      <div class="ai-chat" part="chat" role="group" aria-label=${this._chatPrompt || 'AI chat'}>
-        ${this._chatPrompt
-          ? html`<p class="ai-chat-prompt" part="chat-prompt" aria-live="polite">
-              ${this._chatPrompt}
-            </p>`
-          : nothing}
-        <div class="ai-chat-input">
+      <div class="ai-chat" part="chat" role="group" aria-label="Chat with AI assistant">
+        <div
+          class="ai-chat-log"
+          part="chat-log"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+        >
+          ${this._messages.map(
+            (m) =>
+              html`<div class=${'msg msg-' + m.role} part=${'msg msg-' + m.role}>${m.text}</div>`,
+          )}
+          ${this._chatBusy
+            ? html`<div class="msg msg-assistant msg-thinking" part="msg msg-thinking">
+                ${this._thinkingLabel()}
+              </div>`
+            : nothing}
+        </div>
+        <form class="ai-chat-inputbar" part="inputbar" @submit=${this._onChatInputSubmit}>
           <textarea
             part="chat-textarea"
-            .value=${this._chatText}
+            .value=${this._chatInput}
             @input=${(/** @type {Event} */ e) => {
-              this._chatText = /** @type {HTMLTextAreaElement} */ (e.target).value;
+              this._chatInput = /** @type {HTMLTextAreaElement} */ (e.target).value;
             }}
-            placeholder=${ready
-              ? this._chatPlaceholder()
-              : 'Activate AI to start (download the on-device model).'}
-            ?disabled=${!ready || this._chatBusy || this.listening}
-            aria-label=${this._chatPrompt || 'Describe your data'}
+            @keydown=${this._onChatKeydown}
+            placeholder=${ready ? this._chatPlaceholder() : this._disabledPlaceholder()}
+            ?disabled=${!ready || this.listening}
+            rows="1"
           ></textarea>
           ${this.voiceInput
             ? html`<button
@@ -338,30 +410,43 @@ export class AIForm extends VoiceMixin(AIElement) {
                 part="mic"
                 ?disabled=${!ready || !voiceActive || this._chatBusy}
                 aria-pressed=${this.listening ? 'true' : 'false'}
+                aria-label=${this.listening ? 'Stop listening' : 'Dictate message'}
                 @click=${this._toggleVoiceInput}
-                title=${voiceActive
-                  ? this.listening
-                    ? 'Stop listening'
-                    : 'Dictate into the chat'
-                  : 'SpeechRecognition not available'}
               >
-                ${this.listening ? '⏹️' : '🎤'}
+                ${this.listening ? '⏹' : '🎤'}
               </button>`
             : nothing}
-        </div>
-        <div class="ai-chat-actions">
           <button
-            type="button"
-            data-action="chat-check"
-            part="check"
-            ?disabled=${!canCheck}
-            @click=${this._runExtractionFromChat}
+            type="submit"
+            class="ai-chat-send"
+            data-action="chat-send"
+            part="send"
+            ?disabled=${!canSend}
+            aria-label=${this._sendLabel()}
+            title=${this._sendLabel()}
           >
-            ${this._chatBusy ? this._checkBusyLabel() : this._checkLabel()}
+            ➤
           </button>
-        </div>
+        </form>
       </div>
     `;
+  }
+
+  /** @param {Event} e */
+  _onChatInputSubmit(e) {
+    e.preventDefault();
+    this._runExtractionFromChat();
+  }
+
+  /** @param {KeyboardEvent} e */
+  _onChatKeydown(e) {
+    // Enter sends, Shift+Enter inserts a newline.
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!this._chatBusy && this._chatInput.trim().length > 0 && this.aiReady === true) {
+        this._runExtractionFromChat();
+      }
+    }
   }
 
   /** @override */
@@ -386,13 +471,6 @@ export class AIForm extends VoiceMixin(AIElement) {
     `;
   }
 
-  /**
-   * Render the capability banner above the toolbar. Shows:
-   * - "downloadable": CTA to run `ensureAIReady()`.
-   * - "downloading":  progress bar driven by `aiDownloadProgress`.
-   * - "available":    nothing (silent).
-   * @returns {unknown}
-   */
   _renderStatusBanner() {
     const state = this.aiCapabilities?.prompt ?? 'unavailable';
     if (state === 'available') return nothing;
@@ -551,11 +629,14 @@ export class AIForm extends VoiceMixin(AIElement) {
   }
 
   /**
-   * Recompute the dynamic chat prompt and the `_chatComplete` gate based on
-   * the current values of slotted form fields and their classification.
-   * Emits `ai-conversation-update` whenever anything changes.
+   * Recompute the dynamic prompt and the `_chatComplete` gate based on the
+   * current values of slotted form fields and their classification. Appends
+   * (or replaces) an assistant message when the pending set changes so the
+   * conversation stays in sync. Emits `ai-conversation-update` on changes.
+   * @param {{afterUserTurn?: boolean}} [options]
    */
-  _updateChatState() {
+  _updateChatState(options) {
+    const afterUserTurn = options?.afterUserTurn === true;
     const { aiCandidates, manualFields, form } = this._classifyFields();
 
     const pendingAIRequired = aiCandidates.filter(
@@ -575,11 +656,36 @@ export class AIForm extends VoiceMixin(AIElement) {
     );
     const complete = form ? form.checkValidity() : false;
 
-    const changed = prompt !== this._chatPrompt || complete !== this._chatComplete;
-    this._chatPrompt = prompt;
+    const promptChanged = prompt !== this._lastAssistantPrompt;
+    const completeChanged = complete !== this._chatComplete;
     this._chatComplete = complete;
 
-    if (changed) {
+    // Seed the first assistant message on the very first pass once AI is
+    // available, and on every user-turn response. If the prompt hasn't
+    // actually changed and we already primed the chat, stay silent.
+    if (this.aiAvailable && (!this._primed || afterUserTurn || promptChanged)) {
+      if (this._primed && afterUserTurn) {
+        // Post-user-turn response: always push a fresh assistant message.
+        this._messages = [...this._messages, { role: 'assistant', text: prompt }];
+      } else if (!this._primed) {
+        // First seed.
+        this._messages = [{ role: 'assistant', text: prompt }];
+        this._primed = true;
+      } else if (promptChanged) {
+        // Background recompute (user edited a field by hand): update the
+        // last assistant message if it's still the stale prompt, otherwise
+        // append a new one so the chat keeps history.
+        const last = this._messages[this._messages.length - 1];
+        if (last && last.role === 'assistant' && last.text === this._lastAssistantPrompt) {
+          this._messages = [...this._messages.slice(0, -1), { role: 'assistant', text: prompt }];
+        } else {
+          this._messages = [...this._messages, { role: 'assistant', text: prompt }];
+        }
+      }
+      this._lastAssistantPrompt = prompt;
+    }
+
+    if (promptChanged || completeChanged) {
       this.dispatchEvent(
         new CustomEvent('ai-conversation-update', {
           bubbles: true,
@@ -635,62 +741,79 @@ export class AIForm extends VoiceMixin(AIElement) {
   /**
    * i18n templates for the chat UI. Currently supports `es` and `en`;
    * unknown languages fall back to `en`.
-   * @returns {{and: string, readyAI: string, askOne: (s: string) => string, askMany: (s: string) => string, askOptional: (s: string) => string, askMixed: (r: string, o: string) => string, remindManual: (s: string) => string, placeholder: string, check: string, checking: string, submit: string}}
+   * @returns {{and: string, readyAI: string, askOne: (s: string) => string, askMany: (s: string) => string, askOptional: (s: string) => string, askMixed: (r: string, o: string) => string, remindManual: (s: string) => string, placeholder: string, disabledPlaceholder: string, send: string, thinking: string, submit: string, noMatch: string, noExtractableInputs: string, error: string}}
    */
   _templates() {
     const lang = (this.language || 'en').slice(0, 2).toLowerCase();
     if (lang === 'es') {
       return {
         and: 'y',
-        readyAI: 'Cuéntame lo que quieras; o pulsa Enviar cuando termines.',
-        askOne: (s) => `¿Me dices ${s}?`,
-        askMany: (s) => `Cuéntame ${s}.`,
+        readyAI: 'Tengo todo lo que necesito. Puedes enviar el formulario.',
+        askOne: (s) => `Hola 👋 Para ayudarte a rellenar el formulario, ¿me dices ${s}?`,
+        askMany: (s) => `Hola 👋 Cuéntame ${s} y lo rellenaré por ti.`,
         askOptional: (s) => `Opcionalmente, cuéntame ${s}.`,
-        askMixed: (req, opt) => `Cuéntame ${req}, y opcionalmente ${opt}.`,
-        remindManual: (s) => `Recuerda rellenar a mano: ${s}.`,
-        placeholder: 'Escribe o dicta tu respuesta…',
-        check: 'Comprobar',
-        checking: 'Comprobando…',
-        submit: 'Enviar',
+        askMixed: (req, opt) => `Hola 👋 Cuéntame ${req}, y opcionalmente ${opt}.`,
+        remindManual: (s) => `Además, recuerda rellenar a mano: ${s}.`,
+        placeholder: 'Escribe tu mensaje…',
+        disabledPlaceholder: 'Activa la IA para empezar a chatear.',
+        send: 'Enviar',
+        thinking: 'Pensando…',
+        submit: 'Enviar formulario',
+        noMatch: 'No he podido extraer nada de eso. ¿Puedes repetirlo con más detalle?',
+        noExtractableInputs:
+          'Este formulario no tiene campos marcados con ai-extract, así que no puedo rellenarlo por ti.',
+        error: 'Ha fallado la llamada a la IA. Vuelve a intentarlo.',
       };
     }
     return {
       and: 'and',
-      readyAI: 'Tell me anything else, or click Submit when ready.',
-      askOne: (s) => `Please tell me your ${s}.`,
-      askMany: (s) => `Tell me your ${s}.`,
+      readyAI: "I've got everything I need. You can submit the form.",
+      askOne: (s) => `Hi 👋 To help you fill out the form, what's your ${s}?`,
+      askMany: (s) => `Hi 👋 Tell me your ${s} and I'll fill it in for you.`,
       askOptional: (s) => `Optionally, tell me your ${s}.`,
-      askMixed: (req, opt) => `Tell me your ${req}, and optionally your ${opt}.`,
-      remindManual: (s) => `Don't forget to fill manually: ${s}.`,
-      placeholder: 'Type or dictate your answer…',
-      check: 'Check',
-      checking: 'Checking…',
-      submit: 'Submit',
+      askMixed: (req, opt) => `Hi 👋 Tell me your ${req}, and optionally your ${opt}.`,
+      remindManual: (s) => `Also, don't forget to fill in manually: ${s}.`,
+      placeholder: 'Type a message…',
+      disabledPlaceholder: 'Enable AI to start chatting.',
+      send: 'Send',
+      thinking: 'Thinking…',
+      submit: 'Submit form',
+      noMatch: "I couldn't extract anything from that. Can you rephrase with more detail?",
+      noExtractableInputs:
+        "This form has no fields marked with ai-extract, so I can't fill it in for you.",
+      error: 'The AI call failed. Please try again.',
     };
   }
 
   _chatPlaceholder() {
     return this._templates().placeholder;
   }
-  _checkLabel() {
-    return this._templates().check;
+  _disabledPlaceholder() {
+    return this._templates().disabledPlaceholder;
   }
-  _checkBusyLabel() {
-    return this._templates().checking;
+  _sendLabel() {
+    return this._templates().send;
+  }
+  _thinkingLabel() {
+    return this._templates().thinking;
   }
   _submitLabel() {
     return this._templates().submit;
   }
 
   /**
-   * "Check" button handler. Sends the textarea content to the Prompt API,
-   * parses a JSON payload and writes extracted values back into the
-   * slotted inputs. Triggers input/change events so consumer bindings stay
-   * in sync.
+   * Send handler. Pushes the user's message into the chat, runs extraction
+   * against the Prompt API and writes extracted values back into the
+   * slotted inputs, then asks the state machine to append the assistant's
+   * follow-up message.
    */
   async _runExtractionFromChat() {
-    const text = this._chatText.trim();
+    const text = this._chatInput.trim();
     if (!text) return;
+    // Push the user's message immediately so the chat feels responsive.
+    this._messages = [...this._messages, { role: 'user', text }];
+    this._chatInput = '';
+
     const { aiCandidates } = this._classifyFields();
     if (aiCandidates.length === 0) {
       this.dispatchEvent(
@@ -700,6 +823,10 @@ export class AIForm extends VoiceMixin(AIElement) {
           detail: { reason: 'no-extractable-inputs' },
         }),
       );
+      this._messages = [
+        ...this._messages,
+        { role: 'assistant', text: this._templates().noExtractableInputs },
+      ];
       return;
     }
     this._chatBusy = true;
@@ -714,6 +841,10 @@ export class AIForm extends VoiceMixin(AIElement) {
             detail: { reason: 'empty-extraction', response },
           }),
         );
+        this._messages = [
+          ...this._messages,
+          { role: 'assistant', text: this._templates().noMatch },
+        ];
         return;
       }
 
@@ -747,10 +878,11 @@ export class AIForm extends VoiceMixin(AIElement) {
             detail: { reason: 'no-fields-matched', response, parsed },
           }),
         );
-        return;
+        this._messages = [
+          ...this._messages,
+          { role: 'assistant', text: this._templates().noMatch },
+        ];
       }
-
-      this._chatText = '';
     } catch (error) {
       this.dispatchEvent(
         new CustomEvent('ai-error', {
@@ -759,10 +891,25 @@ export class AIForm extends VoiceMixin(AIElement) {
           detail: { error, stage: 'conversation-extract' },
         }),
       );
+      this._messages = [...this._messages, { role: 'assistant', text: this._templates().error }];
     } finally {
       this._chatBusy = false;
-      this._updateChatState();
+      // Let the state machine push the follow-up assistant message based
+      // on what's still pending (single source of truth for the prompt).
+      this._updateChatState({ afterUserTurn: true });
+      // Scroll the message log after the next paint.
+      this._scrollLogToBottom();
     }
+  }
+
+  /**
+   * Scroll the chat log to the bottom so the newest message is in view.
+   */
+  _scrollLogToBottom() {
+    requestAnimationFrame(() => {
+      const log = this.shadowRoot?.querySelector('.ai-chat-log');
+      if (log) log.scrollTop = log.scrollHeight;
+    });
   }
 
   /**
@@ -983,7 +1130,7 @@ export class AIForm extends VoiceMixin(AIElement) {
     try {
       const transcript = await this.startSpeechInput({ lang: this.language });
       if (transcript == null || transcript === '') return;
-      this._chatText = transcript;
+      this._chatInput = transcript;
     } catch {
       // VoiceMixin already emitted voice-error; nothing more to do here.
     }

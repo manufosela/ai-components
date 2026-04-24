@@ -64,7 +64,7 @@ describe('<ai-form> (skeleton)', () => {
     expect(assigned[0].tagName.toLowerCase()).toBe('form');
   });
 
-  it('renders the AI chat UI and error container when AI is available', async () => {
+  it('renders the AI chat UI (messages + input bar) when AI is available', async () => {
     ({ teardown: teardownMock } = setupChromeAIMock({
       prompt: { availability: 'available', response: 'mock' },
     }));
@@ -77,11 +77,19 @@ describe('<ai-form> (skeleton)', () => {
     expect(chat).not.toBeNull();
     expect(chat.getAttribute('role')).toBe('group');
 
-    // Chat UI has a textarea and a "Check" button.
+    // Message log is an aria-live region that starts with the initial
+    // assistant message.
+    const log = chat.querySelector('.ai-chat-log');
+    expect(log).not.toBeNull();
+    expect(log.getAttribute('role')).toBe('log');
+    const bubbles = log.querySelectorAll('.msg-assistant');
+    expect(bubbles.length).toBeGreaterThan(0);
+
+    // Input bar with textarea + send button.
     const textarea = chat.querySelector('textarea');
     expect(textarea).not.toBeNull();
-    const check = chat.querySelector('button[data-action="chat-check"]');
-    expect(check).not.toBeNull();
+    const send = chat.querySelector('button[data-action="chat-send"]');
+    expect(send).not.toBeNull();
 
     // Mic button is NOT rendered when the voice-input attribute is absent.
     const mic = chat.querySelector('button[data-action="chat-voice"]');
@@ -89,9 +97,8 @@ describe('<ai-form> (skeleton)', () => {
 
     const errors = el.shadowRoot.querySelector('.ai-form-errors');
     expect(errors).not.toBeNull();
-    expect(errors.getAttribute('aria-live')).toBe('polite');
 
-    // The slotted form still renders.
+    // The slotted form still renders, inside the secondary form section.
     const slot = el.shadowRoot.querySelector('slot');
     const assigned = /** @type {HTMLSlotElement} */ (slot).assignedElements();
     expect(assigned[0].tagName.toLowerCase()).toBe('form');
@@ -123,7 +130,7 @@ describe('<ai-form> (skeleton)', () => {
     expect(evt.detail.capabilities.prompt).toBe('available');
   });
 
-  it('exposes shadow parts "chat", "chat-prompt", "chat-textarea", "check" and "errors" for consumer theming', async () => {
+  it('exposes shadow parts "chat", "chat-log", "chat-textarea", "send", "form-section", "errors" for consumer theming', async () => {
     ({ teardown: teardownMock } = setupChromeAIMock({
       prompt: { availability: 'available' },
     }));
@@ -133,8 +140,10 @@ describe('<ai-form> (skeleton)', () => {
     await el.updateComplete;
 
     expect(el.shadowRoot.querySelector('[part="chat"]')).not.toBeNull();
+    expect(el.shadowRoot.querySelector('[part="chat-log"]')).not.toBeNull();
     expect(el.shadowRoot.querySelector('[part="chat-textarea"]')).not.toBeNull();
-    expect(el.shadowRoot.querySelector('[part="check"]')).not.toBeNull();
+    expect(el.shadowRoot.querySelector('[part="send"]')).not.toBeNull();
+    expect(el.shadowRoot.querySelector('[part="form-section"]')).not.toBeNull();
     expect(el.shadowRoot.querySelector('[part="errors"]')).not.toBeNull();
   });
 });
