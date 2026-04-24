@@ -1,0 +1,63 @@
+{
+  "name": "@manufosela/ai-voice",
+  "version": "0.1.0",
+  "description": "VoiceMixin + Web Speech API helpers (SpeechRecognition / SpeechSynthesis) for AIElement-based web components. 100% JavaScript + JSDoc.",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./mixin": {
+      "types": "./dist/types/voice-mixin.d.ts",
+      "import": "./src/voice-mixin.js"
+    },
+    "./listen": {
+      "types": "./dist/types/listen.d.ts",
+      "import": "./src/listen.js"
+    },
+    "./speak": {
+      "types": "./dist/types/speak.d.ts",
+      "import": "./src/speak.js"
+    }
+  },
+  "files": ["src", "dist/types", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "pnpm run build:types",
+    "build:types": "tsc -p tsconfig.types.json",
+    "test": "vitest run --config ../../vitest.config.js --dir test",
+    "test:watch": "vitest --config ../../vitest.config.js --dir test"
+  },
+  "dependencies": {
+    "lit": "^3.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "lit",
+    "web-components",
+    "voice",
+    "speech-recognition",
+    "speech-synthesis",
+    "web-speech-api",
+    "ai-mixin"
+  ],
+  "author": {
+    "name": "Mánu Fosela",
+    "email": "mjfosela@gmail.com",
+    "url": "https://github.com/manufosela"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/manufosela/ai-components/tree/main/packages/ai-voice#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manufosela/ai-components.git",
+    "directory": "packages/ai-voice"
+  },
+  "bugs": {
+    "url": "https://github.com/manufosela/ai-components/issues"
+  }
+}
