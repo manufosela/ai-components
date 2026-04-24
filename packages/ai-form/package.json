@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@manufosela/ai-core": "workspace:*",
+    "@manufosela/ai-voice": "workspace:*",
     "lit": "^3.2.0"
   },
   "devDependencies": {

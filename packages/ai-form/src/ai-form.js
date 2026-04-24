@@ -1,5 +1,6 @@
 import { html, css, nothing } from 'lit';
 import { AIElement, prompt as promptApi } from '@manufosela/ai-core';
+import { VoiceMixin } from '@manufosela/ai-voice';
 
 /**
  * Extracted field ready to be written back onto a slotted form input.
@@ -47,6 +48,11 @@ import { AIElement, prompt as promptApi } from '@manufosela/ai-core';
  * - Semantic validation: inputs with `ai-validate="<rule>"` are validated
  *   on submit against the rule via the Prompt API. Failed rules are
  *   reported with `setCustomValidity` + `form.reportValidity` (AIC-TSK-0009).
+ * - Voice I/O (opt-in): with the `voice-input` attribute, the 🎤 toolbar
+ *   button listens with SpeechRecognition and writes the transcript into
+ *   the currently focused `[ai-voice]` input (or the first one). With
+ *   `voice-output`, validation failures are read aloud via
+ *   SpeechSynthesis (AIC-TSK-0010).
  * @customElement ai-form
  * @slot                   Default slot: the `<form>` the component wraps.
  * @fires ai-ready                 Inherited from AIElement.
@@ -58,11 +64,20 @@ import { AIElement, prompt as promptApi } from '@manufosela/ai-core';
  * @fires ai-validation-start      Semantic validation started; `detail.fields` lists names.
  * @fires ai-validation-passed     All fields satisfied their rules; form submit continues.
  * @fires ai-validation-failed     At least one field failed; `detail.results` has ValidationResult[].
+ * @fires voice-transcript         Inherited from VoiceMixin; includes `detail.transcript`.
+ * @fires voice-start              Inherited from VoiceMixin.
+ * @fires voice-end                Inherited from VoiceMixin.
+ * @fires voice-error              Inherited from VoiceMixin.
+ * @fires voice-unavailable        Inherited from VoiceMixin.
  */
-export class AIForm extends AIElement {
+export class AIForm extends VoiceMixin(AIElement) {
   static properties = {
-    /** BCP-47 language tag used by upcoming AI + voice features. */
+    /** BCP-47 language tag used by AI + voice features. */
     language: { type: String, reflect: true },
+    /** When present, the toolbar 🎤 button is enabled and uses SpeechRecognition. */
+    voiceInput: { type: Boolean, reflect: true, attribute: 'voice-input' },
+    /** When present, validation failures are read aloud with SpeechSynthesis. */
+    voiceOutput: { type: Boolean, reflect: true, attribute: 'voice-output' },
     _pasteOpen: { type: Boolean, state: true },
     _pasteText: { type: String, state: true },
     _pasteBusy: { type: Boolean, state: true },
@@ -134,6 +149,10 @@ export class AIForm extends AIElement {
     /** @type {string} */
     this.language = 'en-US';
     /** @type {boolean} */
+    this.voiceInput = false;
+    /** @type {boolean} */
+    this.voiceOutput = false;
+    /** @type {boolean} */
     this._pasteOpen = false;
     /** @type {string} */
     this._pasteText = '';
@@ -176,6 +195,7 @@ export class AIForm extends AIElement {
   /** @override */
   renderAI() {
     const promptAvailable = this.aiCapabilities?.prompt !== 'unavailable';
+    const voiceActive = this.voiceInput && this.speechInAvailable;
     return html`
       <div class="ai-toolbar" part="toolbar" role="toolbar">
         <button
@@ -189,8 +209,21 @@ export class AIForm extends AIElement {
         >
           📋 Paste & fill
         </button>
-        <button type="button" disabled data-action="voice-input" title="Coming in AIC-TSK-0010">
-          🎤 Voice input
+        <button
+          type="button"
+          data-action="voice-input"
+          ?disabled=${!voiceActive}
+          aria-pressed=${this.listening ? 'true' : 'false'}
+          @click=${this._toggleVoiceInput}
+          title=${voiceActive
+            ? this.listening
+              ? 'Stop listening'
+              : 'Dictate into the focused field'
+            : !this.voiceInput
+              ? 'Enable with the voice-input attribute'
+              : 'SpeechRecognition not available'}
+        >
+          ${this.listening ? '⏹️ Stop' : '🎤 Voice input'}
         </button>
       </div>
       ${this._pasteOpen ? this._renderPasteUI() : nothing}
@@ -492,6 +525,7 @@ export class AIForm extends AIElement {
             detail: { results },
           }),
         );
+        this._speakValidationErrors(results);
         return;
       }
 
@@ -544,6 +578,64 @@ export class AIForm extends AIElement {
           ? parsed.reason
           : 'Does not satisfy the rule';
     return { name: field.name, valid: false, reason: why };
+  }
+
+  /**
+   * Toggle a voice-input dictation session. Writes the transcript into the
+   * resolved target input (currently focused `[ai-voice]` input, or the
+   * first `[ai-voice]` input in the slotted form).
+   * @returns {Promise<void>}
+   */
+  async _toggleVoiceInput() {
+    if (this.listening) {
+      this.stopSpeechInput();
+      return;
+    }
+    try {
+      const transcript = await this.startSpeechInput({ lang: this.language });
+      if (transcript == null || transcript === '') return;
+      const target = this._findVoiceTarget();
+      if (!target) return;
+      target.value = transcript;
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+      target.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch {
+      // VoiceMixin already emitted voice-error; nothing more to do here.
+    }
+  }
+
+  /**
+   * Find the element the next dictation should fill: currently focused
+   * `[ai-voice][name]` input, else the first in the slotted form.
+   * @returns {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null}
+   */
+  _findVoiceTarget() {
+    const form = this.querySelector('form');
+    if (!form) return null;
+    const active = /** @type {any} */ (this.ownerDocument?.activeElement);
+    if (
+      active &&
+      active.matches?.('[ai-voice][name]') &&
+      form.contains(active) &&
+      typeof active.value === 'string'
+    ) {
+      return active;
+    }
+    return /** @type {any} */ (form.querySelector('[ai-voice][name]'));
+  }
+
+  /**
+   * When `voice-output` is set, read the failed validation reasons aloud.
+   * @param {ValidationResult[]} results
+   */
+  _speakValidationErrors(results) {
+    if (!this.voiceOutput || !this.speechOutAvailable) return;
+    const reasons = results
+      .filter((r) => !r.valid && typeof r.reason === 'string' && r.reason.length > 0)
+      .map((r) => /** @type {string} */ (r.reason));
+    if (reasons.length === 0) return;
+    // Fire-and-forget; errors bubble out of VoiceMixin as voice-error.
+    this.speak(reasons.join('. '), { lang: this.language }).catch(() => {});
   }
 
   /**

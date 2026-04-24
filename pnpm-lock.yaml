@@ -56,6 +56,9 @@ importers:
       '@manufosela/ai-core':
         specifier: workspace:*
         version: link:../ai-core
+      '@manufosela/ai-voice':
+        specifier: workspace:*
+        version: link:../ai-voice
       lit:
         specifier: ^3.2.0
         version: 3.3.2
