@@ -1,0 +1,68 @@
+{
+  "name": "@manufosela/ai-core",
+  "version": "0.1.0",
+  "description": "AIElement base class, detectAICapabilities() and helpers for Chrome Built-in AI. 100% JavaScript + JSDoc.",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./ai-element": {
+      "types": "./dist/types/ai-element.d.ts",
+      "import": "./src/ai-element.js"
+    },
+    "./detect": {
+      "types": "./dist/types/detect-ai-capabilities.d.ts",
+      "import": "./src/detect-ai-capabilities.js"
+    },
+    "./helpers": {
+      "types": "./dist/types/helpers.d.ts",
+      "import": "./src/helpers.js"
+    }
+  },
+  "files": [
+    "src",
+    "dist/types",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm run build:types",
+    "build:types": "tsc -p tsconfig.types.json",
+    "test": "vitest run --config ../../vitest.config.js --dir test",
+    "test:watch": "vitest --config ../../vitest.config.js --dir test"
+  },
+  "dependencies": {
+    "lit": "^3.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "lit",
+    "web-components",
+    "ai",
+    "chrome-ai",
+    "gemini-nano",
+    "prompt-api",
+    "ai-element"
+  ],
+  "author": {
+    "name": "Mánu Fosela",
+    "email": "mjfosela@gmail.com",
+    "url": "https://github.com/manufosela"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/manufosela/ai-components/tree/main/packages/ai-core#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manufosela/ai-components.git",
+    "directory": "packages/ai-core"
+  },
+  "bugs": {
+    "url": "https://github.com/manufosela/ai-components/issues"
+  }
+}

@@ -15,8 +15,9 @@
   "scripts": {
     "build": "pnpm -r --filter \"./packages/*\" run build",
     "build:types": "pnpm -r --filter \"./packages/*\" run build:types",
-    "test": "pnpm -r --filter \"./packages/*\" run test",
-    "test:watch": "pnpm -r --filter \"./packages/*\" run test:watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint --no-error-on-unmatched-pattern \"packages/*/src/**/*.js\" \"packages/*/test/**/*.js\" \"apps/**/*.js\"",
     "lint:fix": "pnpm lint --fix",
     "format": "prettier --write --ignore-unknown \"**/*.{js,json,md,astro,yml,yaml}\"",
@@ -57,11 +58,14 @@
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
     "@eslint/js": "^9.0.0",
+    "@vitest/coverage-v8": "4.1.5",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-jsdoc": "^50.6.0",
     "husky": "^9.0.0",
+    "jsdom": "29.0.2",
     "prettier": "^3.3.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "4.1.5"
   }
 }

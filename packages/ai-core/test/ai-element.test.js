@@ -1,0 +1,160 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { html } from 'lit';
+import { AIElement } from '../src/ai-element.js';
+
+let tagCounter = 0;
+
+/**
+ * Define a unique custom element subclass of AIElement for each test so tests
+ * don't collide on the customElements registry.
+ * @param {object} [overrides]
+ * @param {() => unknown} [overrides.renderAI]
+ * @param {() => unknown} [overrides.renderFallback]
+ * @returns {string} the registered tag name
+ */
+function defineAISubclass(overrides = {}) {
+  const tag = `ai-element-test-${++tagCounter}`;
+  class TestEl extends AIElement {
+    renderAI() {
+      return overrides.renderAI ? overrides.renderAI() : html`<span>ai</span>`;
+    }
+    renderFallback() {
+      return overrides.renderFallback ? overrides.renderFallback() : html`<span>fallback</span>`;
+    }
+  }
+  customElements.define(tag, TestEl);
+  return tag;
+}
+
+/**
+ * Mount a custom element into the document and return it.
+ * @param {string} tag
+ * @returns {HTMLElement}
+ */
+function mount(tag) {
+  const el = document.createElement(tag);
+  document.body.appendChild(el);
+  return el;
+}
+
+describe('AIElement', () => {
+  /** @type {string[]} */
+  const globalKeys = ['LanguageModel', 'Writer', 'Summarizer', 'Translator'];
+  /** @type {Record<string, unknown>} */
+  const saved = {};
+
+  beforeEach(() => {
+    for (const k of globalKeys) {
+      saved[k] = /** @type {Record<string, unknown>} */ (globalThis)[k];
+    }
+  });
+
+  afterEach(() => {
+    for (const k of globalKeys) {
+      if (saved[k] === undefined) {
+        delete (/** @type {Record<string, unknown>} */ (globalThis)[k]);
+      } else {
+        /** @type {Record<string, unknown>} */ (globalThis)[k] = saved[k];
+      }
+    }
+    document.body.innerHTML = '';
+  });
+
+  it('starts with aiAvailable=false and aiCapabilities=null before detection', () => {
+    const tag = defineAISubclass();
+    const el = /** @type {AIElement} */ (document.createElement(tag));
+    expect(el.aiAvailable).toBe(false);
+    expect(el.aiCapabilities).toBeNull();
+  });
+
+  it('fires ai-unavailable and stays in fallback when no AI APIs are present', async () => {
+    const tag = defineAISubclass();
+    const el = /** @type {AIElement} */ (mount(tag));
+
+    /** @type {string | null} */
+    let firedEvent = null;
+    el.addEventListener('ai-ready', () => (firedEvent = 'ai-ready'));
+    el.addEventListener('ai-unavailable', () => (firedEvent = 'ai-unavailable'));
+
+    await el.aiDetectionComplete;
+    await el.updateComplete;
+
+    expect(firedEvent).toBe('ai-unavailable');
+    expect(el.aiAvailable).toBe(false);
+    expect(el.aiCapabilities).not.toBeNull();
+    expect(el.shadowRoot?.textContent).toContain('fallback');
+  });
+
+  it('fires ai-ready and renders the AI UI when an AI API is available', async () => {
+    /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+      availability: async () => 'available',
+    };
+
+    const tag = defineAISubclass();
+    const el = /** @type {AIElement} */ (mount(tag));
+
+    /** @type {string | null} */
+    let firedEvent = null;
+    el.addEventListener('ai-ready', () => (firedEvent = 'ai-ready'));
+    el.addEventListener('ai-unavailable', () => (firedEvent = 'ai-unavailable'));
+
+    await el.aiDetectionComplete;
+    await el.updateComplete;
+
+    expect(firedEvent).toBe('ai-ready');
+    expect(el.aiAvailable).toBe(true);
+    expect(el.shadowRoot?.textContent).toContain('ai');
+    expect(el.shadowRoot?.textContent).not.toContain('fallback');
+  });
+
+  it('treats "downloadable" state as available for rendering purposes', async () => {
+    /** @type {Record<string, unknown>} */ (globalThis).Summarizer = {
+      availability: async () => 'downloadable',
+    };
+
+    const tag = defineAISubclass();
+    const el = /** @type {AIElement} */ (mount(tag));
+
+    await el.aiDetectionComplete;
+    expect(el.aiAvailable).toBe(true);
+    expect(el.aiCapabilities?.summarizer).toBe('downloadable');
+  });
+
+  it('includes the capabilities object in the event detail', async () => {
+    /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+      availability: async () => 'available',
+    };
+
+    const tag = defineAISubclass();
+    const el = /** @type {AIElement} */ (mount(tag));
+
+    const evt = await new Promise((resolve) => {
+      el.addEventListener('ai-ready', resolve, { once: true });
+    });
+    expect(/** @type {CustomEvent} */ (evt).detail.capabilities.prompt).toBe('available');
+  });
+
+  it('bubbles and composes the lifecycle event so ancestors receive it', async () => {
+    const tag = defineAISubclass();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const el = /** @type {AIElement} */ (document.createElement(tag));
+    host.appendChild(el);
+
+    const caught = await new Promise((resolve) => {
+      host.addEventListener('ai-unavailable', resolve, { once: true });
+    });
+    expect(caught).toBeTruthy();
+  });
+
+  it('render() falls back to undefined subclasses safely (no unhandled error)', async () => {
+    const tag = `ai-element-bare-${++tagCounter}`;
+    class Bare extends AIElement {}
+    customElements.define(tag, Bare);
+    const el = /** @type {AIElement} */ (mount(tag));
+    await el.aiDetectionComplete;
+    await el.updateComplete;
+    // No exception means success; shadowRoot should be empty.
+    expect(el.shadowRoot?.textContent ?? '').toBe('');
+  });
+});
