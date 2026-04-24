@@ -117,6 +117,28 @@ describe('<ai-form> conversational mode', () => {
       expect(text).toMatch(/Acepto los términos/);
     });
 
+    it('resolves manual field labels from nested <span> inside a wrapping <label>', async () => {
+      const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
+      cleanups.push(teardown);
+
+      const el = mount(
+        'language="es-ES"',
+        `<form>
+          <input name="tel" ai-extract="teléfono" required />
+          <label><span>CV (PDF)</span><input name="cv" type="file" required /></label>
+          <label><input name="tos" type="checkbox" required /><span>Acepto los términos y condiciones</span></label>
+        </form>`,
+      );
+      await ready(el);
+
+      const text = el.shadowRoot.querySelector('.msg-assistant').textContent.trim();
+      expect(text).toMatch(/CV \(PDF\)/);
+      expect(text).toMatch(/Acepto los términos y condiciones/);
+      // The raw name attributes must NOT leak into the prompt.
+      expect(text).not.toMatch(/\bcv\b/);
+      expect(text).not.toMatch(/\btos\b/);
+    });
+
     it('emits ai-conversation-update with pending AI and manual field names', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
@@ -168,6 +190,36 @@ describe('<ai-form> conversational mode', () => {
       // Slotted inputs are filled live.
       expect(el.querySelector('[name="nombre"]').value).toBe('Manu');
       expect(el.querySelector('[name="tel"]').value).toBe('+34 600 000 000');
+    });
+
+    it('does not duplicate the assistant reply after extraction (input/change events must not race with afterUserTurn)', async () => {
+      const { teardown } = setupChromeAIMock({
+        prompt: {
+          availability: 'available',
+          response: JSON.stringify({ nombre: 'Manu', tel: '+34 600 000 000' }),
+        },
+      });
+      cleanups.push(teardown);
+
+      const el = mount(
+        '',
+        `<form>
+          <input name="nombre" ai-extract="nombre completo" required />
+          <input name="tel" ai-extract="móvil" required />
+          <input name="email" ai-extract="email" required />
+        </form>`,
+      );
+      await ready(el);
+
+      await sendChatMessage(el, 'Soy Manu, tel +34 600 000 000');
+      await waitFor(el, 'ai-field-extracted');
+      await el.updateComplete;
+
+      const assistantBubbles = Array.from(el.shadowRoot.querySelectorAll('.msg-assistant'));
+      // Seed + exactly ONE reply after the user's turn.
+      expect(assistantBubbles.length).toBe(2);
+      // The final reply is the single follow-up asking for what's still missing.
+      expect(assistantBubbles[1].textContent.trim()).toMatch(/email/i);
     });
 
     it('shows the Submit button only when the slotted form is fully valid', async () => {

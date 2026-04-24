@@ -283,6 +283,8 @@ export class AIForm extends VoiceMixin(AIElement) {
     this._onSubmit = (event) => {
       this._handleSubmit(event);
     };
+    /** @type {boolean} */
+    this._suppressChatStateUpdates = false;
     /** @type {(e: Event) => void} */
     this._onFormInput = (event) => {
       const t = /** @type {HTMLElement | null} */ (event.target);
@@ -293,6 +295,11 @@ export class AIForm extends VoiceMixin(AIElement) {
       ) {
         if (typeof t.setCustomValidity === 'function') t.setCustomValidity('');
       }
+      // During extraction we rewrite slotted inputs and dispatch input/change
+      // events; letting those push their own assistant messages produces
+      // duplicates. The single source of truth for the assistant reply is
+      // _updateChatState({afterUserTurn: true}) at the end of the extraction.
+      if (this._suppressChatStateUpdates) return;
       this._updateChatState();
     };
   }
@@ -601,11 +608,17 @@ export class AIForm extends VoiceMixin(AIElement) {
     }
     const closest = el.closest('label');
     if (closest) {
-      const parts = Array.from(closest.childNodes)
-        .filter((n) => n.nodeType === Node.TEXT_NODE)
-        .map((n) => (n.textContent ?? '').trim())
-        .filter(Boolean);
-      if (parts.length) return parts.join(' ');
+      // Use the label's full text, but strip form controls first so we
+      // don't leak any input value/text. Works for:
+      //   <label><span>Name</span><input></label>
+      //   <label>Name <input></label>
+      //   <label><input><span>Accept TOS</span></label>
+      const cloned = /** @type {HTMLLabelElement} */ (closest.cloneNode(true));
+      for (const formEl of cloned.querySelectorAll('input, textarea, select, button')) {
+        formEl.remove();
+      }
+      const text = (cloned.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (text) return text;
     }
     const aria = el.getAttribute('aria-label');
     if (aria) return aria;
@@ -661,22 +674,24 @@ export class AIForm extends VoiceMixin(AIElement) {
     this._chatComplete = complete;
 
     // Seed the first assistant message on the very first pass once AI is
-    // available, and on every user-turn response. If the prompt hasn't
-    // actually changed and we already primed the chat, stay silent.
+    // available, and on every user-turn response. Dedup guard: if the
+    // last assistant bubble already carries the same text, say nothing.
     if (this.aiAvailable && (!this._primed || afterUserTurn || promptChanged)) {
-      if (this._primed && afterUserTurn) {
-        // Post-user-turn response: always push a fresh assistant message.
-        this._messages = [...this._messages, { role: 'assistant', text: prompt }];
-      } else if (!this._primed) {
-        // First seed.
+      const lastMsg = this._messages[this._messages.length - 1];
+      const duplicate = lastMsg && lastMsg.role === 'assistant' && lastMsg.text === prompt;
+      if (!this._primed) {
         this._messages = [{ role: 'assistant', text: prompt }];
         this._primed = true;
+      } else if (duplicate) {
+        /* skip — same text as last assistant bubble */
+      } else if (afterUserTurn) {
+        // Post-user-turn response: push a fresh assistant message.
+        this._messages = [...this._messages, { role: 'assistant', text: prompt }];
       } else if (promptChanged) {
         // Background recompute (user edited a field by hand): update the
-        // last assistant message if it's still the stale prompt, otherwise
+        // last assistant bubble if it's still the stale prompt, otherwise
         // append a new one so the chat keeps history.
-        const last = this._messages[this._messages.length - 1];
-        if (last && last.role === 'assistant' && last.text === this._lastAssistantPrompt) {
+        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.text === this._lastAssistantPrompt) {
           this._messages = [...this._messages.slice(0, -1), { role: 'assistant', text: prompt }];
         } else {
           this._messages = [...this._messages, { role: 'assistant', text: prompt }];
@@ -830,6 +845,7 @@ export class AIForm extends VoiceMixin(AIElement) {
       return;
     }
     this._chatBusy = true;
+    this._suppressChatStateUpdates = true;
     try {
       const response = await promptApi(this._buildExtractionPrompt(text, aiCandidates));
       const parsed = this._parseJsonResponse(response);
@@ -894,6 +910,7 @@ export class AIForm extends VoiceMixin(AIElement) {
       this._messages = [...this._messages, { role: 'assistant', text: this._templates().error }];
     } finally {
       this._chatBusy = false;
+      this._suppressChatStateUpdates = false;
       // Let the state machine push the follow-up assistant message based
       // on what's still pending (single source of truth for the prompt).
       this._updateChatState({ afterUserTurn: true });
