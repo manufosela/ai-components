@@ -1,0 +1,184 @@
+---
+const { title = '@manufosela/ai-components', description = 'Web components powered by Chrome Built-in AI' } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="icon" type="image/svg+xml" href={`${base}/favicon.svg`} />
+  </head>
+  <body>
+    <header>
+      <a href={`${base}/`} class="brand">@manufosela / ai-components</a>
+      <nav>
+        <a href={`${base}/`}>Home</a>
+        <a href={`${base}/ai-form/`}>&lt;ai-form&gt;</a>
+        <a href={`${base}/api/`}>API</a>
+        <a
+          href="https://github.com/manufosela/ai-components"
+          target="_blank"
+          rel="noopener noreferrer">GitHub</a
+        >
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer>
+      <p>MIT &copy; Mánu Fosela · Built with Astro + Lit · 100% JavaScript + JSDoc</p>
+    </footer>
+
+    <style is:global>
+      :root {
+        --bg: #0b0d10;
+        --fg: #e7eaee;
+        --muted: #8c96a3;
+        --accent: #5cc8ff;
+        --accent-2: #b28aff;
+        --card: #12161b;
+        --border: #22272e;
+        --danger: #ff7b72;
+        --good: #7ee787;
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Ubuntu,
+          sans-serif;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #ffffff;
+          --fg: #1b1f23;
+          --muted: #57606a;
+          --accent: #0969da;
+          --accent-2: #8250df;
+          --card: #f6f8fa;
+          --border: #d0d7de;
+          --danger: #cf222e;
+          --good: #1a7f37;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        line-height: 1.55;
+      }
+      header,
+      footer,
+      main {
+        max-width: 980px;
+        margin-inline: auto;
+        padding: 1rem 1.25rem;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 1rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .brand {
+        font-weight: 700;
+        color: var(--fg);
+        text-decoration: none;
+      }
+      nav {
+        display: flex;
+        gap: 1rem;
+        margin-left: auto;
+        flex-wrap: wrap;
+      }
+      nav a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+      nav a:hover {
+        color: var(--accent);
+      }
+      main {
+        padding-block: 2rem;
+      }
+      footer {
+        color: var(--muted);
+        font-size: 0.9rem;
+        border-top: 1px solid var(--border);
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+      }
+      h1 {
+        font-size: clamp(1.8rem, 3vw, 2.4rem);
+      }
+      a {
+        color: var(--accent);
+      }
+      code,
+      pre,
+      kbd {
+        font-family:
+          ui-monospace,
+          Menlo,
+          Consolas,
+          monospace;
+      }
+      pre {
+        background: var(--card);
+        border: 1px solid var(--border);
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        overflow-x: auto;
+      }
+      code {
+        background: var(--card);
+        padding: 0.1em 0.35em;
+        border-radius: 3px;
+        border: 1px solid var(--border);
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        border: none;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+      }
+      .grid-2 {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+      .pill {
+        display: inline-block;
+        padding: 0.1rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .pill.good {
+        border-color: var(--good);
+        color: var(--good);
+      }
+      .pill.warn {
+        border-color: var(--accent-2);
+        color: var(--accent-2);
+      }
+    </style>
+  </body>
+</html>
