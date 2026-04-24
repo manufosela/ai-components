@@ -13,7 +13,23 @@ import { AIElement, prompt as promptApi } from '@manufosela/ai-core';
  * @typedef {object} ExtractableField
  * @property {string} name        Input's `name` attribute (used as the JSON key).
  * @property {string} description Natural-language hint from `ai-extract`.
- * @property {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} element The DOM node to fill.
+ * @property {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} element The DOM node that receives the extracted value.
+ */
+
+/**
+ * Field descriptor built from a slotted input with `ai-validate`.
+ * @typedef {object} ValidatableField
+ * @property {string} name Input's `name` attribute (identifies the field in events).
+ * @property {string} rule Natural-language rule from `ai-validate`.
+ * @property {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} element The DOM node under validation.
+ */
+
+/**
+ * Outcome of validating a single field.
+ * @typedef {object} ValidationResult
+ * @property {string}  name  Field `name`.
+ * @property {boolean} valid `true` when the value satisfies the rule.
+ * @property {string=} reason Short explanation shown to the user when `valid` is false.
  */
 
 /**
@@ -28,14 +44,20 @@ import { AIElement, prompt as promptApi } from '@manufosela/ai-core';
  * - Paste-assist: click 📋 Paste & fill → type/paste free text → Apply.
  *   The component asks Chrome's Prompt API to extract the fields declared
  *   via `ai-extract` on slotted inputs and fills them (AIC-TSK-0008).
+ * - Semantic validation: inputs with `ai-validate="<rule>"` are validated
+ *   on submit against the rule via the Prompt API. Failed rules are
+ *   reported with `setCustomValidity` + `form.reportValidity` (AIC-TSK-0009).
  * @customElement ai-form
  * @slot                   Default slot: the `<form>` the component wraps.
- * @fires ai-ready             Inherited from AIElement.
- * @fires ai-unavailable       Inherited from AIElement.
+ * @fires ai-ready                 Inherited from AIElement.
+ * @fires ai-unavailable           Inherited from AIElement.
  * @fires ai-paste-assist-start    Paste-assist session started.
  * @fires ai-paste-assist-result   Paste-assist finished; `detail.fields` is an array of ExtractedField.
  * @fires ai-no-match              Paste-assist finished with no fields extracted.
- * @fires ai-error                 Paste-assist failed (`detail.error`).
+ * @fires ai-error                 An AI call failed (`detail.error`, `detail.stage`).
+ * @fires ai-validation-start      Semantic validation started; `detail.fields` lists names.
+ * @fires ai-validation-passed     All fields satisfied their rules; form submit continues.
+ * @fires ai-validation-failed     At least one field failed; `detail.results` has ValidationResult[].
  */
 export class AIForm extends AIElement {
   static properties = {
@@ -44,6 +66,7 @@ export class AIForm extends AIElement {
     _pasteOpen: { type: Boolean, state: true },
     _pasteText: { type: String, state: true },
     _pasteBusy: { type: Boolean, state: true },
+    _validating: { type: Boolean, state: true },
   };
 
   static styles = css`
@@ -116,6 +139,38 @@ export class AIForm extends AIElement {
     this._pasteText = '';
     /** @type {boolean} */
     this._pasteBusy = false;
+    /** @type {boolean} */
+    this._validating = false;
+    /** @type {boolean} */
+    this._bypassNextSubmit = false;
+    // Arrow-bound handler so we can add/remove the same reference.
+    /** @type {(e: Event) => void} */
+    this._onSubmit = (event) => {
+      this._handleSubmit(event);
+    };
+  }
+
+  /** @override */
+  connectedCallback() {
+    super.connectedCallback();
+    // Submit events bubble from the slotted <form> through the light DOM
+    // up to the host, so a single host-level listener catches every submit.
+    this.addEventListener('submit', this._onSubmit, true);
+  }
+
+  /** @override */
+  disconnectedCallback() {
+    this.removeEventListener('submit', this._onSubmit, true);
+    super.disconnectedCallback();
+  }
+
+  /** @override */
+  updated(changed) {
+    super.updated?.(changed);
+    if (changed.has('_validating')) {
+      if (this._validating) this.setAttribute('aria-busy', 'true');
+      else this.removeAttribute('aria-busy');
+    }
   }
 
   /** @override */
@@ -216,7 +271,7 @@ export class AIForm extends AIElement {
     this._pasteBusy = true;
     try {
       const response = await promptApi(this._buildExtractionPrompt(text, fields));
-      const parsed = this._parseExtractionResponse(response);
+      const parsed = this._parseJsonResponse(response);
 
       if (!parsed || Object.keys(parsed).length === 0) {
         this.dispatchEvent(
@@ -329,7 +384,7 @@ export class AIForm extends AIElement {
    * @param {string} response
    * @returns {Record<string, unknown> | null}
    */
-  _parseExtractionResponse(response) {
+  _parseJsonResponse(response) {
     if (typeof response !== 'string') return null;
     const attempts = [];
     attempts.push(response.trim());
@@ -354,5 +409,164 @@ export class AIForm extends AIElement {
       }
     }
     return null;
+  }
+
+  /**
+   * Intercepts every submit that bubbles out of the slotted form. Acts as a
+   * no-op when there are no `ai-validate` fields or the Prompt API is not
+   * available (so native HTML5 validation keeps working).
+   * @param {Event} event
+   */
+  _handleSubmit(event) {
+    if (this._bypassNextSubmit) {
+      this._bypassNextSubmit = false;
+      return;
+    }
+    if (!(event.target instanceof HTMLFormElement)) return;
+    if (!this.aiAvailable || this.aiCapabilities?.prompt === 'unavailable') {
+      return;
+    }
+    const fields = this._findValidatableFields(event.target);
+    if (fields.length === 0) return;
+
+    event.preventDefault();
+    this._runValidation(event.target, fields);
+  }
+
+  /**
+   * Walk the given form for every input/textarea/select with `ai-validate`.
+   * @param {HTMLFormElement} form
+   * @returns {ValidatableField[]}
+   */
+  _findValidatableFields(form) {
+    /** @type {ValidatableField[]} */
+    const fields = [];
+    for (const c of form.querySelectorAll('[ai-validate][name]')) {
+      const el = /** @type {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} */ (c);
+      if (!el.name) continue;
+      const rule = el.getAttribute('ai-validate') ?? '';
+      if (!rule) continue;
+      fields.push({ name: el.name, rule, element: el });
+    }
+    return fields;
+  }
+
+  /**
+   * Validate every field in parallel and report results.
+   * @param {HTMLFormElement} form
+   * @param {ValidatableField[]} fields
+   * @returns {Promise<void>}
+   */
+  async _runValidation(form, fields) {
+    this._validating = true;
+    // Clear previous custom validity before re-evaluating.
+    for (const f of fields) f.element.setCustomValidity('');
+
+    this.dispatchEvent(
+      new CustomEvent('ai-validation-start', {
+        bubbles: true,
+        composed: true,
+        detail: { fields: fields.map((f) => f.name) },
+      }),
+    );
+
+    try {
+      /** @type {ValidationResult[]} */
+      const results = await Promise.all(fields.map((f) => this._validateField(f)));
+
+      let anyInvalid = false;
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        if (!result.valid) {
+          fields[i].element.setCustomValidity(result.reason ?? 'Invalid');
+          anyInvalid = true;
+        }
+      }
+
+      if (anyInvalid) {
+        form.reportValidity();
+        this.dispatchEvent(
+          new CustomEvent('ai-validation-failed', {
+            bubbles: true,
+            composed: true,
+            detail: { results },
+          }),
+        );
+        return;
+      }
+
+      this.dispatchEvent(
+        new CustomEvent('ai-validation-passed', {
+          bubbles: true,
+          composed: true,
+          detail: { results },
+        }),
+      );
+      // All clear: re-submit the form once without re-running validation.
+      this._bypassNextSubmit = true;
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.submit();
+    } catch (error) {
+      this.dispatchEvent(
+        new CustomEvent('ai-error', {
+          bubbles: true,
+          composed: true,
+          detail: { error, stage: 'semantic-validation' },
+        }),
+      );
+    } finally {
+      this._validating = false;
+    }
+  }
+
+  /**
+   * Ask the Prompt API whether a single field satisfies its natural-language
+   * rule. Empty values short-circuit to `valid: true` — use the standard
+   * `required` attribute for presence checks.
+   * @param {ValidatableField} field
+   * @returns {Promise<ValidationResult>}
+   */
+  async _validateField(field) {
+    const value = field.element.value ?? '';
+    if (value.trim() === '') return { name: field.name, valid: true };
+
+    const response = await promptApi(this._buildValidationPrompt(value, field.rule));
+    const parsed = this._parseJsonResponse(response);
+    if (!parsed) {
+      return { name: field.name, valid: true }; // Give the user the benefit of the doubt.
+    }
+    const ok = parsed.ok === true || parsed.valid === true;
+    if (ok) return { name: field.name, valid: true };
+    const why =
+      typeof parsed.why === 'string'
+        ? parsed.why
+        : typeof parsed.reason === 'string'
+          ? parsed.reason
+          : 'Does not satisfy the rule';
+    return { name: field.name, valid: false, reason: why };
+  }
+
+  /**
+   * Build the per-field validation prompt.
+   * @param {string} value
+   * @param {string} rule
+   * @returns {string}
+   */
+  _buildValidationPrompt(value, rule) {
+    return [
+      'You evaluate whether a user input satisfies a rule.',
+      'Reply ONLY with minified JSON:',
+      '- {"ok":true} when the value clearly satisfies the rule.',
+      '- {"ok":false,"why":"<short reason in the user language>"} when it does not.',
+      'Do not wrap the JSON in markdown fences. Do not add prose.',
+      `Language hint: ${this.language}.`,
+      '',
+      `Rule: ${rule}`,
+      '',
+      'Value:',
+      '"""',
+      value,
+      '"""',
+    ].join('\n');
   }
 }
