@@ -26,6 +26,8 @@ export default [
         HTMLSlotElement: 'readonly',
         CustomEvent: 'readonly',
         Event: 'readonly',
+        CSS: 'readonly',
+        Node: 'readonly',
         AbortController: 'readonly',
         AbortSignal: 'readonly',
         URL: 'readonly',

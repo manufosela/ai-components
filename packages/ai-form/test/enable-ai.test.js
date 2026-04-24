@@ -35,10 +35,10 @@ describe('<ai-form> AI lifecycle UX', () => {
     const status = el.shadowRoot.querySelector('.ai-status[data-state="unsupported"]');
     expect(status).not.toBeNull();
     expect(status.textContent).toMatch(/not available/i);
-    expect(el.shadowRoot.querySelector('.ai-toolbar')).toBeNull();
+    expect(el.shadowRoot.querySelector('.ai-chat')).toBeNull();
   });
 
-  it('renders the "download" banner when Prompt is downloadable, disables Paste & fill', async () => {
+  it('renders the "download" banner when Prompt is downloadable, disables chat Check button', async () => {
     const { teardown } = setupChromeAIMock({
       prompt: { availability: 'downloadable' },
     });
@@ -53,8 +53,12 @@ describe('<ai-form> AI lifecycle UX', () => {
     const enable = el.shadowRoot.querySelector('button[data-action="enable-ai"]');
     expect(enable).not.toBeNull();
 
-    const paste = el.shadowRoot.querySelector('button[data-action="paste-assist"]');
-    expect(paste.disabled).toBe(true);
+    // Chat UI is rendered but textarea and Check are disabled until the model is downloaded.
+    const textarea = el.shadowRoot.querySelector('[part="chat-textarea"]');
+    expect(textarea).not.toBeNull();
+    expect(textarea.disabled).toBe(true);
+    const check = el.shadowRoot.querySelector('button[data-action="chat-check"]');
+    expect(check.disabled).toBe(true);
   });
 
   it('clicking Enable AI calls ensureAIReady and updates the UI to "available"', async () => {
@@ -105,8 +109,9 @@ describe('<ai-form> AI lifecycle UX', () => {
     expect(progress).toEqual([0.3, 0.7, 1]);
     expect(el.aiReady).toBe(true);
     expect(el.shadowRoot.querySelector('.ai-status[data-state="downloadable"]')).toBeNull();
-    const paste = el.shadowRoot.querySelector('button[data-action="paste-assist"]');
-    expect(paste.disabled).toBe(false);
+    // Once the model is available, the chat textarea becomes enabled.
+    const textarea = el.shadowRoot.querySelector('[part="chat-textarea"]');
+    expect(textarea.disabled).toBe(false);
   });
 
   it('renders the "downloading" banner with a progress bar when state is "downloading"', async () => {
@@ -133,6 +138,6 @@ describe('<ai-form> AI lifecycle UX', () => {
     const el = mount();
     await ready(el);
     expect(el.shadowRoot.querySelector('.ai-status')).toBeNull();
-    expect(el.shadowRoot.querySelector('.ai-toolbar')).not.toBeNull();
+    expect(el.shadowRoot.querySelector('.ai-chat')).not.toBeNull();
   });
 });

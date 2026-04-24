@@ -15,19 +15,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </p>
     <ul>
       <li>
-        <strong>AI available</strong> → toolbar enabled, everything works.
+        <strong>AI available</strong> → conversational chat UI above the form. Type or dictate your
+        data; the AI fills the fields live. The <em>Submit</em> button appears only when every
+        <code>required</code> field is satisfied.
       </li>
       <li>
-        <strong>AI downloadable</strong> → banner with <em>Enable AI</em> button that triggers the
-        one-time Gemini Nano download (~2 GB).
+        <strong>AI downloadable</strong> → chat UI is rendered but disabled; banner with
+        <em>Enable AI</em> triggers the one-time Gemini Nano download (~2 GB).
       </li>
       <li>
-        <strong>AI downloading</strong> → banner with live progress bar.
+        <strong>AI downloading</strong> → banner with live progress bar; chat stays disabled until
+        it finishes.
       </li>
       <li>
         <strong>AI unsupported</strong> → native HTML5 form with a small explanatory notice.
       </li>
     </ul>
+    <p>
+      Fields tagged with <code>ai-extract</code> are filled by the AI. Everything else (file inputs,
+      checkboxes, <code>&lt;select&gt;</code>, dates…) is <em>manual</em>; the chat prompt reminds
+      the user about them.
+    </p>
   </section>
 
   <section>
@@ -52,7 +60,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <input
             name="nombre"
             ai-extract="nombre completo"
-            ai-voice
             ai-validate="at least two words, no digits"
             required
           />
@@ -64,6 +71,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             type="tel"
             ai-extract="número de móvil"
             ai-validate="spanish mobile (9 digits, starting with 6 or 7)"
+            required
           />
         </label>
         <label>
@@ -74,12 +82,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <span>Comentario</span>
           <textarea
             name="about"
-            ai-voice
+            ai-extract="comentario libre"
             ai-validate="tono profesional, máximo 200 palabras"
             rows="3"></textarea>
         </label>
+        <label>
+          <span>CV (PDF)</span>
+          <input name="cv" type="file" accept="application/pdf" required />
+        </label>
+        <label class="inline">
+          <input name="tos" type="checkbox" required />
+          <span>Acepto los términos</span>
+        </label>
         <div class="actions">
-          <button type="submit">Enviar</button>
           <button type="reset">Reset</button>
         </div>
       </form>
@@ -88,17 +103,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   <section>
     <h2>Event log</h2>
-    <p>Everything the component emits. Bubbled and <code>composed: true</code>, so this page catches them all.</p>
+    <p>
+      Everything the component emits. Bubbled and <code>composed: true</code>, so this page catches
+      them all.
+    </p>
     <pre id="event-log" aria-live="polite">(waiting for capability detection…)</pre>
   </section>
 
   <section>
-    <h2>Try pasting this</h2>
-    <p>Click <strong>📋 Paste &amp; fill</strong> and paste:</p>
-    <pre><code>Soy Juan Pérez, móvil 666 12 34 56 y juan.perez@example.com. Me interesa vuestro producto para mi equipo, por favor contactadme.</code></pre>
+    <h2>Try dictating or typing this</h2>
+    <p>In the chat textarea, paste or dictate:</p>
+    <pre><code>Soy Juan Pérez, móvil 666 12 34 56 y juan.perez@example.com. Quiero destacar mi experiencia con equipos técnicos.</code></pre>
     <p>
-      The Prompt API should return structured JSON that fills <code>nombre</code>, <code>telefono</code>
-      and <code>email</code>. The textarea is left alone because it has no <code>ai-extract</code>.
+      The Prompt API should extract structured JSON that fills <code>nombre</code>,
+      <code>telefono</code>, <code>email</code> and <code>about</code>. You still have to attach
+      the CV file and tick the TOS checkbox before <em>Submit</em> appears — that's the "manual
+      fields" reminder in the dynamic prompt.
     </p>
   </section>
 
@@ -124,6 +144,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     ai-form label {
       display: grid;
       gap: 0.25rem;
+    }
+    ai-form label.inline {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
     }
     ai-form label span {
       font-size: 0.9rem;
@@ -182,8 +208,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       'ai-download-progress',
       'ai-download-complete',
       'ai-download-error',
-      'ai-paste-assist-start',
-      'ai-paste-assist-result',
+      'ai-field-extracted',
+      'ai-conversation-update',
       'ai-no-match',
       'ai-error',
       'ai-validation-start',

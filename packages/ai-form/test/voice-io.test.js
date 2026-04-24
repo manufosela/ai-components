@@ -54,138 +54,71 @@ describe('<ai-form> voice I/O', () => {
   });
 
   describe('mic button gating', () => {
-    it('is disabled when the voice-input attribute is absent, even with AI present', async () => {
+    it('is not rendered when the voice-input attribute is absent, even with AI present', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
       const speech = setupWebSpeechMock();
       cleanups.push(speech.teardown);
 
-      const el = mount('', '<form><input name="a" ai-voice /></form>');
+      const el = mount('', '<form><input name="a" ai-extract="a" /></form>');
       await ready(el);
 
-      const btn = shadow(el, 'button[data-action="voice-input"]');
-      expect(btn.disabled).toBe(true);
+      expect(shadow(el, 'button[data-action="chat-voice"]')).toBeNull();
     });
 
-    it('is disabled when voice-input is set but SpeechRecognition is missing', async () => {
+    it('is rendered but disabled when voice-input is set but SpeechRecognition is missing', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
       const speech = setupWebSpeechMock({ speechIn: false });
       cleanups.push(speech.teardown);
 
-      const el = mount('voice-input', '<form><input name="a" ai-voice /></form>');
+      const el = mount('voice-input', '<form><input name="a" ai-extract="a" /></form>');
       await ready(el);
 
-      const btn = shadow(el, 'button[data-action="voice-input"]');
+      const btn = shadow(el, 'button[data-action="chat-voice"]');
+      expect(btn).not.toBeNull();
       expect(btn.disabled).toBe(true);
     });
 
-    it('is enabled when voice-input + SpeechRecognition are both available', async () => {
+    it('is enabled when voice-input + SpeechRecognition + aiReady are all true', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
       const speech = setupWebSpeechMock();
       cleanups.push(speech.teardown);
 
-      const el = mount('voice-input', '<form><input name="a" ai-voice /></form>');
+      const el = mount('voice-input', '<form><input name="a" ai-extract="a" /></form>');
       await ready(el);
 
-      const btn = shadow(el, 'button[data-action="voice-input"]');
+      const btn = shadow(el, 'button[data-action="chat-voice"]');
+      expect(btn).not.toBeNull();
       expect(btn.disabled).toBe(false);
       expect(btn.getAttribute('aria-pressed')).toBe('false');
     });
   });
 
-  describe('dictation', () => {
-    it('fills the currently focused [ai-voice] input with the transcript', async () => {
+  describe('dictation into the chat textarea', () => {
+    it('writes the transcript into the chat textarea', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
       const speech = setupWebSpeechMock();
       cleanups.push(speech.teardown);
 
-      const el = mount(
-        'voice-input',
-        '<form><input name="nombre" ai-voice /><input name="ciudad" ai-voice /></form>',
-      );
+      const el = mount('voice-input', '<form><input name="nombre" ai-extract="nombre" /></form>');
       await ready(el);
 
-      const ciudad = /** @type {HTMLInputElement} */ (el.querySelector('[name="ciudad"]'));
-      ciudad.focus();
-
-      /** @type {string[]} */
-      const events = [];
-      ciudad.addEventListener('input', () => events.push('input'));
-      ciudad.addEventListener('change', () => events.push('change'));
-
-      shadow(el, 'button[data-action="voice-input"]').click();
-      await el.updateComplete;
-
-      // Drive the fake SpeechRecognition through the last created instance.
-      const inst = speech.RecognitionCtor.instances.at(-1);
-      inst.fireResult([{ transcript: 'Madrid' }]);
-      inst.fireEnd();
-
-      await waitFor(el, 'voice-transcript');
-      // Wait one tick so the writeback in _toggleVoiceInput lands.
-      await new Promise((r) => setTimeout(r, 0));
-
-      expect(ciudad.value).toBe('Madrid');
-      expect(events).toEqual(['input', 'change']);
-    });
-
-    it('falls back to the first [ai-voice] input when nothing is focused', async () => {
-      const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
-      cleanups.push(teardown);
-      const speech = setupWebSpeechMock();
-      cleanups.push(speech.teardown);
-
-      const el = mount(
-        'voice-input',
-        '<form><input name="first" ai-voice /><input name="second" ai-voice /></form>',
-      );
-      await ready(el);
-
-      // Make sure nothing is focused.
-      /** @type {HTMLElement} */ (document.activeElement)?.blur?.();
-
-      shadow(el, 'button[data-action="voice-input"]').click();
+      shadow(el, 'button[data-action="chat-voice"]').click();
       await el.updateComplete;
 
       const inst = speech.RecognitionCtor.instances.at(-1);
-      inst.fireResult([{ transcript: 'hola' }]);
+      inst.fireResult([{ transcript: 'Me llamo Manu' }]);
       inst.fireEnd();
 
       await waitFor(el, 'voice-transcript');
-      // Wait one tick so the writeback in _toggleVoiceInput lands.
       await new Promise((r) => setTimeout(r, 0));
-      expect(el.querySelector('[name="first"]').value).toBe('hola');
-      expect(el.querySelector('[name="second"]').value).toBe('');
-    });
-
-    it('ignores focused inputs without ai-voice', async () => {
-      const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
-      cleanups.push(teardown);
-      const speech = setupWebSpeechMock();
-      cleanups.push(speech.teardown);
-
-      const el = mount(
-        'voice-input',
-        '<form><input name="plain" /><input name="voice-only" ai-voice /></form>',
-      );
-      await ready(el);
-      /** @type {HTMLInputElement} */ (el.querySelector('[name="plain"]')).focus();
-
-      shadow(el, 'button[data-action="voice-input"]').click();
       await el.updateComplete;
 
-      const inst = speech.RecognitionCtor.instances.at(-1);
-      inst.fireResult([{ transcript: 'ignored' }]);
-      inst.fireEnd();
-
-      await waitFor(el, 'voice-transcript');
-      // Wait one tick so the writeback in _toggleVoiceInput lands.
-      await new Promise((r) => setTimeout(r, 0));
-      expect(el.querySelector('[name="plain"]').value).toBe('');
-      expect(el.querySelector('[name="voice-only"]').value).toBe('ignored');
+      const textarea = shadow(el, '[part="chat-textarea"]');
+      expect(textarea.value).toBe('Me llamo Manu');
     });
 
     it('toggles: a second click stops the ongoing session', async () => {
@@ -194,10 +127,10 @@ describe('<ai-form> voice I/O', () => {
       const speech = setupWebSpeechMock();
       cleanups.push(speech.teardown);
 
-      const el = mount('voice-input', '<form><input name="x" ai-voice /></form>');
+      const el = mount('voice-input', '<form><input name="x" ai-extract="x" /></form>');
       await ready(el);
 
-      const btn = shadow(el, 'button[data-action="voice-input"]');
+      const btn = shadow(el, 'button[data-action="chat-voice"]');
       btn.click();
       await el.updateComplete;
 
@@ -205,34 +138,10 @@ describe('<ai-form> voice I/O', () => {
       const inst = speech.RecognitionCtor.instances.at(-1);
       const abortsBefore = inst.abort.calls.length;
 
-      // Second click stops.
-      shadow(el, 'button[data-action="voice-input"]').click();
-      // abort() is invoked via AbortController in VoiceMixin.
+      shadow(el, 'button[data-action="chat-voice"]').click();
       inst.fireEnd();
       await waitFor(el, 'voice-end');
       expect(inst.abort.calls.length).toBeGreaterThan(abortsBefore);
-    });
-
-    it('does nothing if the form has no [ai-voice] input and nothing is focused', async () => {
-      const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
-      cleanups.push(teardown);
-      const speech = setupWebSpeechMock();
-      cleanups.push(speech.teardown);
-
-      const el = mount('voice-input', '<form><input name="plain" /></form>');
-      await ready(el);
-
-      shadow(el, 'button[data-action="voice-input"]').click();
-      await el.updateComplete;
-
-      const inst = speech.RecognitionCtor.instances.at(-1);
-      inst.fireResult([{ transcript: 'never lands' }]);
-      inst.fireEnd();
-
-      await waitFor(el, 'voice-transcript');
-      // Wait one tick so the writeback in _toggleVoiceInput lands.
-      await new Promise((r) => setTimeout(r, 0));
-      expect(el.querySelector('[name="plain"]').value).toBe('');
     });
   });
 
@@ -264,7 +173,6 @@ describe('<ai-form> voice I/O', () => {
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 
       await waitFor(el, 'ai-validation-failed');
-      // Let the speak call register.
       await new Promise((r) => setTimeout(r, 0));
 
       expect(speech.synth.speak.calls.length).toBe(1);
@@ -318,7 +226,6 @@ describe('<ai-form> voice I/O', () => {
         new Event('submit', { bubbles: true, cancelable: true }),
       );
       await waitFor(el, 'ai-validation-failed');
-      // synth.speak doesn't exist; no crash is the assertion.
       expect(el.speechOutAvailable).toBe(false);
     });
   });

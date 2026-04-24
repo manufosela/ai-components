@@ -37,29 +37,29 @@ import { VoiceMixin } from '@manufosela/ai-voice';
  * `<ai-form>` — wraps a `<form>` and progressively enhances it with Chrome
  * Built-in AI when available.
  *
- * When Chrome AI is present, the component renders an AI toolbar above the
- * slotted form. When AI is unavailable, it renders the slotted form as-is.
+ * When AI is present, the component renders a conversational chat UI above
+ * the slotted form: an instructional prompt, a free-text textarea, an
+ * optional mic (with `voice-input`) and a "Check" button. The AI extracts
+ * values from the user's reply and fills the slotted inputs in place —
+ * they stay visible and act as a live ledger. The submit button only
+ * surfaces when the slotted form's native validity reports complete.
+ * When AI is unavailable, the slotted form renders as-is (native HTML5
+ * behavior).
  *
- * Implemented features:
- * - Capability detection + render switch (AIC-TSK-0007).
- * - Paste-assist: click 📋 Paste & fill → type/paste free text → Apply.
- *   The component asks Chrome's Prompt API to extract the fields declared
- *   via `ai-extract` on slotted inputs and fills them (AIC-TSK-0008).
- * - Semantic validation: inputs with `ai-validate="<rule>"` are validated
- *   on submit against the rule via the Prompt API. Failed rules are
- *   reported with `setCustomValidity` + `form.reportValidity` (AIC-TSK-0009).
- * - Voice I/O (opt-in): with the `voice-input` attribute, the 🎤 toolbar
- *   button listens with SpeechRecognition and writes the transcript into
- *   the currently focused `[ai-voice]` input (or the first one). With
- *   `voice-output`, validation failures are read aloud via
- *   SpeechSynthesis (AIC-TSK-0010).
+ * AI-candidates are detected by the `ai-extract` attribute. Everything
+ * else (file uploads, checkboxes, selects, dates, inputs without
+ * `ai-extract`) is treated as **manual** — shown to the user to fill
+ * by hand and mentioned in the dynamic prompt when still required.
+ *
+ * Semantic validation (`ai-validate`) and voice output (`voice-output`,
+ * reads validation failures aloud) continue to work unchanged.
  * @customElement ai-form
  * @slot                   Default slot: the `<form>` the component wraps.
  * @fires ai-ready                 Inherited from AIElement.
  * @fires ai-unavailable           Inherited from AIElement.
- * @fires ai-paste-assist-start    Paste-assist session started.
- * @fires ai-paste-assist-result   Paste-assist finished; `detail.fields` is an array of ExtractedField.
- * @fires ai-no-match              Paste-assist finished with no fields extracted.
+ * @fires ai-field-extracted       AI wrote a value into a slotted input; `detail: {name, value}`.
+ * @fires ai-conversation-update   Conversation state changed; `detail: {pendingAIFields, pendingManualFields, prompt}`.
+ * @fires ai-no-match              An extraction round produced zero fields.
  * @fires ai-error                 An AI call failed (`detail.error`, `detail.stage`).
  * @fires ai-validation-start      Semantic validation started; `detail.fields` lists names.
  * @fires ai-validation-passed     All fields satisfied their rules; form submit continues.
@@ -74,13 +74,14 @@ export class AIForm extends VoiceMixin(AIElement) {
   static properties = {
     /** BCP-47 language tag used by AI + voice features. */
     language: { type: String, reflect: true },
-    /** When present, the toolbar 🎤 button is enabled and uses SpeechRecognition. */
+    /** When present, the chat 🎤 button is enabled and uses SpeechRecognition to dictate into the chat textarea. */
     voiceInput: { type: Boolean, reflect: true, attribute: 'voice-input' },
     /** When present, validation failures are read aloud with SpeechSynthesis. */
     voiceOutput: { type: Boolean, reflect: true, attribute: 'voice-output' },
-    _pasteOpen: { type: Boolean, state: true },
-    _pasteText: { type: String, state: true },
-    _pasteBusy: { type: Boolean, state: true },
+    _chatText: { type: String, state: true },
+    _chatBusy: { type: Boolean, state: true },
+    _chatPrompt: { type: String, state: true },
+    _chatComplete: { type: Boolean, state: true },
     _validating: { type: Boolean, state: true },
   };
 
@@ -90,51 +91,74 @@ export class AIForm extends VoiceMixin(AIElement) {
       font: inherit;
       color: inherit;
     }
-    .ai-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.25rem;
-      align-items: center;
-      padding: 0.25rem 0;
-      margin-bottom: 0.5rem;
-      border-bottom: 1px solid var(--ai-form-toolbar-border, rgba(0, 0, 0, 0.1));
-    }
-    .ai-toolbar button {
+    button {
       appearance: none;
-      border: 1px solid var(--ai-form-button-border, rgba(0, 0, 0, 0.15));
+      border: 1px solid
+        var(--ai-form-button-border, color-mix(in srgb, currentColor 25%, transparent));
       background: var(--ai-form-button-bg, transparent);
       color: inherit;
-      padding: 0.25rem 0.5rem;
+      padding: 0.35rem 0.75rem;
       border-radius: 4px;
       cursor: pointer;
       font: inherit;
     }
-    .ai-toolbar button[disabled] {
+    button[disabled] {
       opacity: 0.5;
       cursor: not-allowed;
     }
-    .ai-paste {
+    button[data-action='chat-submit'] {
+      background: var(--ai-form-submit-bg, color-mix(in srgb, currentColor 12%, transparent));
+      font-weight: 600;
+    }
+    .ai-chat {
       display: flex;
       flex-direction: column;
-      gap: 0.25rem;
-      margin-bottom: 0.5rem;
-      padding: 0.5rem;
-      border: 1px dashed var(--ai-form-paste-border, rgba(0, 0, 0, 0.2));
-      border-radius: 4px;
-      background: var(--ai-form-paste-bg, transparent);
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      padding: 0.75rem;
+      border: 1px solid
+        var(--ai-form-chat-border, color-mix(in srgb, currentColor 20%, transparent));
+      border-radius: 6px;
+      background: var(--ai-form-chat-bg, transparent);
     }
-    .ai-paste textarea {
-      width: 100%;
-      min-height: 4.5rem;
+    .ai-chat-prompt {
+      margin: 0;
+      font-weight: 500;
+      color: inherit;
+    }
+    .ai-chat-input {
+      display: flex;
+      gap: 0.5rem;
+      align-items: flex-start;
+    }
+    .ai-chat-input textarea {
+      flex: 1;
+      min-height: 4rem;
       resize: vertical;
       font: inherit;
-      padding: 0.25rem;
+      padding: 0.5rem;
       box-sizing: border-box;
+      color: inherit;
+      background: var(--ai-form-chat-textarea-bg, transparent);
+      border: 1px solid
+        var(--ai-form-chat-textarea-border, color-mix(in srgb, currentColor 25%, transparent));
+      border-radius: 4px;
     }
-    .ai-paste-actions {
+    .ai-chat-mic {
+      flex: 0 0 auto;
+    }
+    .ai-chat-mic[aria-pressed='true'] {
+      background: var(--ai-form-chat-mic-active-bg, color-mix(in srgb, red 15%, transparent));
+    }
+    .ai-chat-actions {
       display: flex;
       justify-content: flex-end;
-      gap: 0.25rem;
+      gap: 0.5rem;
+    }
+    .ai-chat-submit {
+      margin-top: 0.5rem;
+      display: flex;
+      justify-content: flex-end;
     }
     .ai-form-errors {
       margin-top: 0.5rem;
@@ -186,20 +210,37 @@ export class AIForm extends VoiceMixin(AIElement) {
     this.voiceInput = false;
     /** @type {boolean} */
     this.voiceOutput = false;
-    /** @type {boolean} */
-    this._pasteOpen = false;
     /** @type {string} */
-    this._pasteText = '';
+    this._chatText = '';
     /** @type {boolean} */
-    this._pasteBusy = false;
+    this._chatBusy = false;
+    /** @type {string} */
+    this._chatPrompt = '';
+    /** @type {boolean} */
+    this._chatComplete = false;
     /** @type {boolean} */
     this._validating = false;
     /** @type {boolean} */
     this._bypassNextSubmit = false;
-    // Arrow-bound handler so we can add/remove the same reference.
+    // Arrow-bound handlers so we can add/remove the same reference.
     /** @type {(e: Event) => void} */
     this._onSubmit = (event) => {
       this._handleSubmit(event);
+    };
+    /** @type {(e: Event) => void} */
+    this._onFormInput = (event) => {
+      // Any input/change inside the slotted <form> can move us into/out
+      // of "complete" state and update the dynamic prompt. Clear any
+      // stale custom validity on the edited input (decision #2).
+      const t = /** @type {HTMLElement | null} */ (event.target);
+      if (
+        t instanceof HTMLInputElement ||
+        t instanceof HTMLTextAreaElement ||
+        t instanceof HTMLSelectElement
+      ) {
+        if (typeof t.setCustomValidity === 'function') t.setCustomValidity('');
+      }
+      this._updateChatState();
     };
   }
 
@@ -209,12 +250,24 @@ export class AIForm extends VoiceMixin(AIElement) {
     // Submit events bubble from the slotted <form> through the light DOM
     // up to the host, so a single host-level listener catches every submit.
     this.addEventListener('submit', this._onSubmit, true);
+    // Track any manual edits inside the slotted form so our chat prompt
+    // and submit-gate stay in sync.
+    this.addEventListener('input', this._onFormInput, true);
+    this.addEventListener('change', this._onFormInput, true);
   }
 
   /** @override */
   disconnectedCallback() {
     this.removeEventListener('submit', this._onSubmit, true);
+    this.removeEventListener('input', this._onFormInput, true);
+    this.removeEventListener('change', this._onFormInput, true);
     super.disconnectedCallback();
+  }
+
+  /** @override */
+  firstUpdated() {
+    // Initial pass once the slot is populated.
+    this._updateChatState();
   }
 
   /** @override */
@@ -228,42 +281,86 @@ export class AIForm extends VoiceMixin(AIElement) {
 
   /** @override */
   renderAI() {
-    const promptReady = this.aiCapabilities?.prompt === 'available';
-    const voiceActive = this.voiceInput && this.speechInAvailable;
     return html`
-      ${this._renderStatusBanner()}
-      <div class="ai-toolbar" part="toolbar" role="toolbar">
-        <button
-          type="button"
-          data-action="paste-assist"
-          ?disabled=${!promptReady || this._pasteBusy}
-          @click=${this._openPasteAssist}
-          title=${promptReady
-            ? 'Paste free text to auto-fill the form'
-            : 'Enable AI first (download the model)'}
-        >
-          📋 Paste & fill
-        </button>
-        <button
-          type="button"
-          data-action="voice-input"
-          ?disabled=${!voiceActive}
-          aria-pressed=${this.listening ? 'true' : 'false'}
-          @click=${this._toggleVoiceInput}
-          title=${voiceActive
-            ? this.listening
-              ? 'Stop listening'
-              : 'Dictate into the focused field'
-            : !this.voiceInput
-              ? 'Enable with the voice-input attribute'
-              : 'SpeechRecognition not available'}
-        >
-          ${this.listening ? '⏹️ Stop' : '🎤 Voice input'}
-        </button>
-      </div>
-      ${this._pasteOpen ? this._renderPasteUI() : nothing}
+      ${this._renderStatusBanner()} ${this._renderChatUI()}
       <slot></slot>
+      ${this._chatComplete
+        ? html`<div class="ai-chat-submit" part="submit-wrap">
+            <button
+              type="button"
+              data-action="chat-submit"
+              part="submit"
+              @click=${this._submitForm}
+            >
+              ${this._submitLabel()}
+            </button>
+          </div>`
+        : nothing}
       <div class="ai-form-errors" part="errors" aria-live="polite"></div>
+    `;
+  }
+
+  /**
+   * Render the conversational chat UI: instructional prompt, free-text
+   * textarea (+ optional mic), and "Check" button. Everything is disabled
+   * until `aiReady` (model actually downloaded).
+   * @returns {unknown}
+   */
+  _renderChatUI() {
+    const ready = this.aiReady === true;
+    const voiceActive = this.voiceInput && this.speechInAvailable;
+    const canCheck = ready && !this._chatBusy && this._chatText.trim().length > 0;
+    return html`
+      <div class="ai-chat" part="chat" role="group" aria-label=${this._chatPrompt || 'AI chat'}>
+        ${this._chatPrompt
+          ? html`<p class="ai-chat-prompt" part="chat-prompt" aria-live="polite">
+              ${this._chatPrompt}
+            </p>`
+          : nothing}
+        <div class="ai-chat-input">
+          <textarea
+            part="chat-textarea"
+            .value=${this._chatText}
+            @input=${(/** @type {Event} */ e) => {
+              this._chatText = /** @type {HTMLTextAreaElement} */ (e.target).value;
+            }}
+            placeholder=${ready
+              ? this._chatPlaceholder()
+              : 'Activate AI to start (download the on-device model).'}
+            ?disabled=${!ready || this._chatBusy || this.listening}
+            aria-label=${this._chatPrompt || 'Describe your data'}
+          ></textarea>
+          ${this.voiceInput
+            ? html`<button
+                type="button"
+                class="ai-chat-mic"
+                data-action="chat-voice"
+                part="mic"
+                ?disabled=${!ready || !voiceActive || this._chatBusy}
+                aria-pressed=${this.listening ? 'true' : 'false'}
+                @click=${this._toggleVoiceInput}
+                title=${voiceActive
+                  ? this.listening
+                    ? 'Stop listening'
+                    : 'Dictate into the chat'
+                  : 'SpeechRecognition not available'}
+              >
+                ${this.listening ? '⏹️' : '🎤'}
+              </button>`
+            : nothing}
+        </div>
+        <div class="ai-chat-actions">
+          <button
+            type="button"
+            data-action="chat-check"
+            part="check"
+            ?disabled=${!canCheck}
+            @click=${this._runExtractionFromChat}
+          >
+            ${this._chatBusy ? this._checkBusyLabel() : this._checkLabel()}
+          </button>
+        </div>
+      </div>
     `;
   }
 
@@ -343,58 +440,259 @@ export class AIForm extends VoiceMixin(AIElement) {
   }
 
   /**
-   * @returns {unknown}
+   * Classify slotted form fields into two groups:
+   * - AI-candidates: inputs/textareas with the `ai-extract` attribute. The
+   *   Prompt API will extract values for these from the chat text.
+   * - Manual fields: everything else with a `name` attribute (file inputs,
+   *   checkboxes, radios, selects, dates, plain text without `ai-extract`).
+   *   The user fills these by hand; the dynamic prompt reminds them when
+   *   any are required and empty.
+   * @returns {{aiCandidates: ExtractableField[], manualFields: ExtractableField[], form: HTMLFormElement | null}}
    */
-  _renderPasteUI() {
-    return html`
-      <div class="ai-paste" part="paste">
-        <textarea
-          .value=${this._pasteText}
-          @input=${(/** @type {Event} */ e) => {
-            this._pasteText = /** @type {HTMLTextAreaElement} */ (e.target).value;
-          }}
-          placeholder="Paste the text to extract from…"
-          ?disabled=${this._pasteBusy}
-        ></textarea>
-        <div class="ai-paste-actions">
-          <button
-            type="button"
-            data-action="paste-cancel"
-            ?disabled=${this._pasteBusy}
-            @click=${this._cancelPasteAssist}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-action="paste-apply"
-            ?disabled=${this._pasteBusy || !this._pasteText.trim()}
-            @click=${this._applyPasteAssist}
-          >
-            ${this._pasteBusy ? 'Working…' : 'Apply'}
-          </button>
-        </div>
-      </div>
-    `;
+  _classifyFields() {
+    const slot = this.shadowRoot?.querySelector('slot');
+    if (!slot) return { aiCandidates: [], manualFields: [], form: null };
+    const assigned = /** @type {HTMLSlotElement} */ (slot).assignedElements({
+      flatten: true,
+    });
+    /** @type {ExtractableField[]} */
+    const aiCandidates = [];
+    /** @type {ExtractableField[]} */
+    const manualFields = [];
+    /** @type {HTMLFormElement | null} */
+    let form = null;
+    for (const root of assigned) {
+      if (!form && root instanceof HTMLFormElement) form = root;
+      else if (!form) {
+        const nested = root.querySelector('form');
+        if (nested instanceof HTMLFormElement) form = nested;
+      }
+      const named = root.querySelectorAll('[name]');
+      for (const c of named) {
+        if (
+          !(c instanceof HTMLInputElement) &&
+          !(c instanceof HTMLTextAreaElement) &&
+          !(c instanceof HTMLSelectElement)
+        ) {
+          continue;
+        }
+        const el = /** @type {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} */ (c);
+        if (!el.name) continue;
+        if (el.hasAttribute('ai-extract')) {
+          aiCandidates.push({
+            name: el.name,
+            description: el.getAttribute('ai-extract') ?? '',
+            element: el,
+          });
+        } else {
+          manualFields.push({
+            name: el.name,
+            description: this._fieldHumanLabel(el),
+            element: el,
+          });
+        }
+      }
+    }
+    return { aiCandidates, manualFields, form };
   }
 
-  _openPasteAssist() {
-    this._pasteOpen = true;
-    this._pasteText = '';
-    this.dispatchEvent(new CustomEvent('ai-paste-assist-start', { bubbles: true, composed: true }));
+  /**
+   * Human-readable label for a field, used in the dynamic chat prompt.
+   * Precedence: `ai-label` → associated `<label>` text → `aria-label` →
+   * `placeholder` → `name`.
+   * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} el
+   * @returns {string}
+   */
+  _fieldHumanLabel(el) {
+    const explicit = el.getAttribute('ai-label');
+    if (explicit) return explicit;
+    const id = el.id;
+    if (id) {
+      // CSS.escape is not guaranteed (jsdom, older envs). Fall back to a
+      // raw id and swallow selector-parse errors.
+      const escaped =
+        typeof globalThis.CSS !== 'undefined' && typeof globalThis.CSS.escape === 'function'
+          ? globalThis.CSS.escape(id)
+          : id;
+      try {
+        const lbl = el.ownerDocument?.querySelector(`label[for="${escaped}"]`);
+        if (lbl && lbl.textContent) return lbl.textContent.trim();
+      } catch {
+        /* invalid selector — fall through to other label strategies */
+      }
+    }
+    const closest = el.closest('label');
+    if (closest) {
+      const parts = Array.from(closest.childNodes)
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => (n.textContent ?? '').trim())
+        .filter(Boolean);
+      if (parts.length) return parts.join(' ');
+    }
+    const aria = el.getAttribute('aria-label');
+    if (aria) return aria;
+    const placeholder = el.getAttribute('placeholder');
+    if (placeholder) return placeholder;
+    return el.name;
   }
 
-  _cancelPasteAssist() {
-    this._pasteOpen = false;
-    this._pasteText = '';
+  /**
+   * True when the field has a value (non-empty for text, checked for boxes,
+   * has files for file inputs, has a selected non-empty option for select).
+   * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} el
+   * @returns {boolean}
+   */
+  _fieldHasValue(el) {
+    if (el instanceof HTMLInputElement) {
+      if (el.type === 'checkbox' || el.type === 'radio') return el.checked;
+      if (el.type === 'file') return el.files ? el.files.length > 0 : false;
+    }
+    return typeof el.value === 'string' && el.value !== '';
   }
 
-  async _applyPasteAssist() {
-    const text = this._pasteText.trim();
+  /**
+   * Recompute the dynamic chat prompt and the `_chatComplete` gate based on
+   * the current values of slotted form fields and their classification.
+   * Emits `ai-conversation-update` whenever anything changes.
+   */
+  _updateChatState() {
+    const { aiCandidates, manualFields, form } = this._classifyFields();
+
+    const pendingAIRequired = aiCandidates.filter(
+      (f) => f.element.hasAttribute('required') && !this._fieldHasValue(f.element),
+    );
+    const pendingAIOptional = aiCandidates.filter(
+      (f) => !f.element.hasAttribute('required') && !this._fieldHasValue(f.element),
+    );
+    const pendingManualRequired = manualFields.filter(
+      (f) => f.element.hasAttribute('required') && !this._fieldHasValue(f.element),
+    );
+
+    const prompt = this._buildConversationPrompt(
+      pendingAIRequired,
+      pendingAIOptional,
+      pendingManualRequired,
+    );
+    const complete = form ? form.checkValidity() : false;
+
+    const changed = prompt !== this._chatPrompt || complete !== this._chatComplete;
+    this._chatPrompt = prompt;
+    this._chatComplete = complete;
+
+    if (changed) {
+      this.dispatchEvent(
+        new CustomEvent('ai-conversation-update', {
+          bubbles: true,
+          composed: true,
+          detail: {
+            pendingAIFields: pendingAIRequired.map((f) => f.name),
+            pendingManualFields: pendingManualRequired.map((f) => f.name),
+            prompt,
+          },
+        }),
+      );
+    }
+  }
+
+  /**
+   * Build the instructional text shown above the chat textarea.
+   * @param {ExtractableField[]} aiRequired
+   * @param {ExtractableField[]} aiOptional
+   * @param {ExtractableField[]} manualRequired
+   * @returns {string}
+   */
+  _buildConversationPrompt(aiRequired, aiOptional, manualRequired) {
+    const t = this._templates();
+    const toLabels = (xs) => xs.map((f) => f.description || f.name);
+    const joinList = (items) => {
+      if (items.length === 0) return '';
+      if (items.length === 1) return items[0];
+      if (items.length === 2) return `${items[0]} ${t.and} ${items[1]}`;
+      return `${items.slice(0, -1).join(', ')} ${t.and} ${items[items.length - 1]}`;
+    };
+    const aiReq = toLabels(aiRequired);
+    const aiOpt = toLabels(aiOptional);
+    const manReq = toLabels(manualRequired);
+
+    let text = '';
+    if (aiReq.length === 0 && aiOpt.length === 0) {
+      text = t.readyAI;
+    } else if (aiReq.length === 1 && aiOpt.length === 0) {
+      text = t.askOne(aiReq[0]);
+    } else if (aiReq.length > 1 && aiOpt.length === 0) {
+      text = t.askMany(joinList(aiReq));
+    } else if (aiReq.length === 0 && aiOpt.length > 0) {
+      text = t.askOptional(joinList(aiOpt));
+    } else {
+      text = t.askMixed(joinList(aiReq), joinList(aiOpt));
+    }
+    if (manReq.length > 0) {
+      text = `${text} ${t.remindManual(joinList(manReq))}`;
+    }
+    return text;
+  }
+
+  /**
+   * i18n templates for the chat UI. Currently supports `es` and `en`;
+   * unknown languages fall back to `en`.
+   * @returns {{and: string, readyAI: string, askOne: (s: string) => string, askMany: (s: string) => string, askOptional: (s: string) => string, askMixed: (r: string, o: string) => string, remindManual: (s: string) => string, placeholder: string, check: string, checking: string, submit: string}}
+   */
+  _templates() {
+    const lang = (this.language || 'en').slice(0, 2).toLowerCase();
+    if (lang === 'es') {
+      return {
+        and: 'y',
+        readyAI: 'Cuéntame lo que quieras; o pulsa Enviar cuando termines.',
+        askOne: (s) => `¿Me dices ${s}?`,
+        askMany: (s) => `Cuéntame ${s}.`,
+        askOptional: (s) => `Opcionalmente, cuéntame ${s}.`,
+        askMixed: (req, opt) => `Cuéntame ${req}, y opcionalmente ${opt}.`,
+        remindManual: (s) => `Recuerda rellenar a mano: ${s}.`,
+        placeholder: 'Escribe o dicta tu respuesta…',
+        check: 'Comprobar',
+        checking: 'Comprobando…',
+        submit: 'Enviar',
+      };
+    }
+    return {
+      and: 'and',
+      readyAI: 'Tell me anything else, or click Submit when ready.',
+      askOne: (s) => `Please tell me your ${s}.`,
+      askMany: (s) => `Tell me your ${s}.`,
+      askOptional: (s) => `Optionally, tell me your ${s}.`,
+      askMixed: (req, opt) => `Tell me your ${req}, and optionally your ${opt}.`,
+      remindManual: (s) => `Don't forget to fill manually: ${s}.`,
+      placeholder: 'Type or dictate your answer…',
+      check: 'Check',
+      checking: 'Checking…',
+      submit: 'Submit',
+    };
+  }
+
+  _chatPlaceholder() {
+    return this._templates().placeholder;
+  }
+  _checkLabel() {
+    return this._templates().check;
+  }
+  _checkBusyLabel() {
+    return this._templates().checking;
+  }
+  _submitLabel() {
+    return this._templates().submit;
+  }
+
+  /**
+   * "Check" button handler. Sends the textarea content to the Prompt API,
+   * parses a JSON payload and writes extracted values back into the
+   * slotted inputs. Triggers input/change events so consumer bindings stay
+   * in sync.
+   */
+  async _runExtractionFromChat() {
+    const text = this._chatText.trim();
     if (!text) return;
-
-    const fields = this._findExtractableFields();
-    if (fields.length === 0) {
+    const { aiCandidates } = this._classifyFields();
+    if (aiCandidates.length === 0) {
       this.dispatchEvent(
         new CustomEvent('ai-no-match', {
           bubbles: true,
@@ -402,15 +700,12 @@ export class AIForm extends VoiceMixin(AIElement) {
           detail: { reason: 'no-extractable-inputs' },
         }),
       );
-      this._pasteOpen = false;
       return;
     }
-
-    this._pasteBusy = true;
+    this._chatBusy = true;
     try {
-      const response = await promptApi(this._buildExtractionPrompt(text, fields));
+      const response = await promptApi(this._buildExtractionPrompt(text, aiCandidates));
       const parsed = this._parseJsonResponse(response);
-
       if (!parsed || Object.keys(parsed).length === 0) {
         this.dispatchEvent(
           new CustomEvent('ai-no-match', {
@@ -424,13 +719,23 @@ export class AIForm extends VoiceMixin(AIElement) {
 
       /** @type {ExtractedField[]} */
       const extracted = [];
-      for (const field of fields) {
+      for (const field of aiCandidates) {
         const value = parsed[field.name];
         if (value == null || value === '') continue;
         const str = String(value);
+        if (typeof field.element.setCustomValidity === 'function') {
+          field.element.setCustomValidity('');
+        }
         field.element.value = str;
         field.element.dispatchEvent(new Event('input', { bubbles: true }));
         field.element.dispatchEvent(new Event('change', { bubbles: true }));
+        this.dispatchEvent(
+          new CustomEvent('ai-field-extracted', {
+            bubbles: true,
+            composed: true,
+            detail: { name: field.name, value: str },
+          }),
+        );
         extracted.push({ name: field.name, value: str });
       }
 
@@ -445,51 +750,30 @@ export class AIForm extends VoiceMixin(AIElement) {
         return;
       }
 
-      this.dispatchEvent(
-        new CustomEvent('ai-paste-assist-result', {
-          bubbles: true,
-          composed: true,
-          detail: { fields: extracted, raw: response },
-        }),
-      );
-      this._pasteOpen = false;
-      this._pasteText = '';
+      this._chatText = '';
     } catch (error) {
       this.dispatchEvent(
         new CustomEvent('ai-error', {
           bubbles: true,
           composed: true,
-          detail: { error, stage: 'paste-assist' },
+          detail: { error, stage: 'conversation-extract' },
         }),
       );
     } finally {
-      this._pasteBusy = false;
+      this._chatBusy = false;
+      this._updateChatState();
     }
   }
 
   /**
-   * Walk the slotted `<form>` and return every input/textarea/select that
-   * declares an `ai-extract` attribute and has a usable `name`.
-   * @returns {ExtractableField[]}
+   * Submit the slotted form programmatically. Uses `requestSubmit()` so
+   * native HTML5 validity + our `ai-validate` interception both fire.
    */
-  _findExtractableFields() {
-    const slot = this.shadowRoot?.querySelector('slot');
-    if (!slot) return [];
-    const assigned = /** @type {HTMLSlotElement} */ (slot).assignedElements({
-      flatten: true,
-    });
-    /** @type {ExtractableField[]} */
-    const fields = [];
-    for (const root of assigned) {
-      const candidates = root.querySelectorAll('[ai-extract][name]');
-      for (const c of candidates) {
-        const el = /** @type {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} */ (c);
-        const description = el.getAttribute('ai-extract') ?? '';
-        if (!el.name) continue;
-        fields.push({ name: el.name, description, element: el });
-      }
-    }
-    return fields;
+  _submitForm() {
+    const { form } = this._classifyFields();
+    if (!form) return;
+    if (typeof form.requestSubmit === 'function') form.requestSubmit();
+    else form.submit();
   }
 
   /**
@@ -686,9 +970,9 @@ export class AIForm extends VoiceMixin(AIElement) {
   }
 
   /**
-   * Toggle a voice-input dictation session. Writes the transcript into the
-   * resolved target input (currently focused `[ai-voice]` input, or the
-   * first `[ai-voice]` input in the slotted form).
+   * Toggle a voice-input dictation session. In conversational mode the
+   * transcript is written into the chat textarea (replacing any prior
+   * content) so the user can review/edit before pressing "Check".
    * @returns {Promise<void>}
    */
   async _toggleVoiceInput() {
@@ -699,34 +983,10 @@ export class AIForm extends VoiceMixin(AIElement) {
     try {
       const transcript = await this.startSpeechInput({ lang: this.language });
       if (transcript == null || transcript === '') return;
-      const target = this._findVoiceTarget();
-      if (!target) return;
-      target.value = transcript;
-      target.dispatchEvent(new Event('input', { bubbles: true }));
-      target.dispatchEvent(new Event('change', { bubbles: true }));
+      this._chatText = transcript;
     } catch {
       // VoiceMixin already emitted voice-error; nothing more to do here.
     }
-  }
-
-  /**
-   * Find the element the next dictation should fill: currently focused
-   * `[ai-voice][name]` input, else the first in the slotted form.
-   * @returns {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null}
-   */
-  _findVoiceTarget() {
-    const form = this.querySelector('form');
-    if (!form) return null;
-    const active = /** @type {any} */ (this.ownerDocument?.activeElement);
-    if (
-      active &&
-      active.matches?.('[ai-voice][name]') &&
-      form.contains(active) &&
-      typeof active.value === 'string'
-    ) {
-      return active;
-    }
-    return /** @type {any} */ (form.querySelector('[ai-voice][name]'));
   }
 
   /**

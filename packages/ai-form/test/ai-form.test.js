@@ -52,11 +52,11 @@ describe('<ai-form> (skeleton)', () => {
     expect(el.getAttribute('language')).toBe('es-ES');
   });
 
-  it('renders the fallback slot only (no toolbar) when AI is unavailable', async () => {
+  it('renders the fallback slot only (no chat UI) when AI is unavailable', async () => {
     const el = mountAIForm();
     await el.aiDetectionComplete;
     await el.updateComplete;
-    expect(el.shadowRoot.querySelector('.ai-toolbar')).toBeNull();
+    expect(el.shadowRoot.querySelector('.ai-chat')).toBeNull();
     const slot = el.shadowRoot.querySelector('slot');
     expect(slot).not.toBeNull();
     const assigned = /** @type {HTMLSlotElement} */ (slot).assignedElements();
@@ -64,7 +64,7 @@ describe('<ai-form> (skeleton)', () => {
     expect(assigned[0].tagName.toLowerCase()).toBe('form');
   });
 
-  it('renders the AI toolbar and error container when AI is available', async () => {
+  it('renders the AI chat UI and error container when AI is available', async () => {
     ({ teardown: teardownMock } = setupChromeAIMock({
       prompt: { availability: 'available', response: 'mock' },
     }));
@@ -73,18 +73,19 @@ describe('<ai-form> (skeleton)', () => {
     await el.aiDetectionComplete;
     await el.updateComplete;
 
-    const toolbar = el.shadowRoot.querySelector('.ai-toolbar');
-    expect(toolbar).not.toBeNull();
-    expect(toolbar.getAttribute('role')).toBe('toolbar');
+    const chat = el.shadowRoot.querySelector('.ai-chat');
+    expect(chat).not.toBeNull();
+    expect(chat.getAttribute('role')).toBe('group');
 
-    const buttons = toolbar.querySelectorAll('button');
-    expect(buttons.length).toBe(2);
-    // Paste & fill is enabled when the Prompt API is available (TSK-0008).
-    const pasteBtn = toolbar.querySelector('button[data-action="paste-assist"]');
-    expect(pasteBtn.disabled).toBe(false);
-    // Voice input is still a placeholder (TSK-0010).
-    const voiceBtn = toolbar.querySelector('button[data-action="voice-input"]');
-    expect(voiceBtn.disabled).toBe(true);
+    // Chat UI has a textarea and a "Check" button.
+    const textarea = chat.querySelector('textarea');
+    expect(textarea).not.toBeNull();
+    const check = chat.querySelector('button[data-action="chat-check"]');
+    expect(check).not.toBeNull();
+
+    // Mic button is NOT rendered when the voice-input attribute is absent.
+    const mic = chat.querySelector('button[data-action="chat-voice"]');
+    expect(mic).toBeNull();
 
     const errors = el.shadowRoot.querySelector('.ai-form-errors');
     expect(errors).not.toBeNull();
@@ -122,7 +123,7 @@ describe('<ai-form> (skeleton)', () => {
     expect(evt.detail.capabilities.prompt).toBe('available');
   });
 
-  it('exposes shadow parts "toolbar" and "errors" for consumer theming', async () => {
+  it('exposes shadow parts "chat", "chat-prompt", "chat-textarea", "check" and "errors" for consumer theming', async () => {
     ({ teardown: teardownMock } = setupChromeAIMock({
       prompt: { availability: 'available' },
     }));
@@ -131,9 +132,9 @@ describe('<ai-form> (skeleton)', () => {
     await el.aiDetectionComplete;
     await el.updateComplete;
 
-    const toolbar = el.shadowRoot.querySelector('[part="toolbar"]');
-    const errors = el.shadowRoot.querySelector('[part="errors"]');
-    expect(toolbar).not.toBeNull();
-    expect(errors).not.toBeNull();
+    expect(el.shadowRoot.querySelector('[part="chat"]')).not.toBeNull();
+    expect(el.shadowRoot.querySelector('[part="chat-textarea"]')).not.toBeNull();
+    expect(el.shadowRoot.querySelector('[part="check"]')).not.toBeNull();
+    expect(el.shadowRoot.querySelector('[part="errors"]')).not.toBeNull();
   });
 });

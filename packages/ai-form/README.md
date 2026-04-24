@@ -4,17 +4,14 @@
 
 `<ai-form>` — wraps a `<form>` and progressively enhances it with Chrome Built-in AI when available:
 
-- Paste free text to auto-fill inputs (AIC-TSK-0008, shipped).
-- Natural-language validation rules (AIC-TSK-0009, shipped).
-- Optional voice input / output (AIC-TSK-0010, shipped).
+- **Conversational chat UI** — when AI is on, renders a chat above the form: instructional prompt, free-text textarea (optionally with a 🎤 mic) and a "Check" button. The AI extracts values from the user's reply and fills the slotted inputs live. The submit button surfaces only when every `required` field is satisfied.
+- **Natural-language validation rules** — inputs with `ai-validate="<rule>"` are validated against the rule via the Prompt API on submit.
+- **Voice I/O** — `voice-input` dictates into the chat textarea; `voice-output` reads validation failures aloud.
+- **Mixed AI + manual fields** — file uploads, checkboxes, selects, dates (or any input without `ai-extract`) stay visible for the user to fill; the dynamic prompt reminds them when required manual fields are still empty.
 
 If Chrome Built-in AI is **not** available, the component renders the slotted `<form>` as-is and delegates to HTML5 native validation. The underlying `<form>` always works.
 
 **100% JavaScript + JSDoc.** Published `.d.ts` generated from JSDoc.
-
-## Status
-
-> Fill-from-text, semantic validation and **voice I/O** are shipped. Sprint 1 complete pending docs site and 0.1.0 release (AIC-TSK-0011 / 0012).
 
 ## Install
 
@@ -29,42 +26,57 @@ npm install @manufosela/ai-form @manufosela/ai-core
   import '@manufosela/ai-form';
 </script>
 
-<ai-form language="es-ES">
+<ai-form language="es-ES" voice-input voice-output>
   <form>
     <label>Nombre <input name="nombre" ai-extract="nombre completo" required /></label>
-    <label
-      >Teléfono
+    <label>
+      Teléfono
       <input
         name="telefono"
         type="tel"
         ai-extract="número de móvil"
         ai-validate="móvil español válido"
-    /></label>
-    <label>Email <input name="email" type="email" ai-extract="dirección de email" /></label>
-    <label
-      >Comentario
-      <textarea name="about" ai-validate="tono profesional, máximo 200 palabras"></textarea>
+        required
+      />
     </label>
-    <button type="submit">Enviar</button>
+    <label>Email <input name="email" type="email" ai-extract="dirección de email" /></label>
+    <label>
+      Comentario
+      <textarea
+        name="about"
+        ai-extract="comentario libre"
+        ai-validate="tono profesional, máximo 200 palabras"
+      ></textarea>
+    </label>
+    <label>CV (PDF) <input name="cv" type="file" required /></label>
+    <label><input name="tos" type="checkbox" required /> Acepto los términos</label>
   </form>
 </ai-form>
 ```
 
 ## Attributes
 
-| Attribute      | Description                                                                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `language`     | BCP-47 language tag (default `en-US`). Used by all AI + voice features.                                                                      |
-| `voice-input`  | When present, the toolbar 🎤 button is enabled and uses SpeechRecognition to dictate into the focused `[ai-voice]` input (or the first one). |
-| `voice-output` | When present, validation failures are read aloud via SpeechSynthesis.                                                                        |
+| Attribute      | Description                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `language`     | BCP-47 language tag (default `en-US`). Used for the dynamic chat prompt (currently `es` / `en` templates; other languages fall back to `en`) and by all voice features.              |
+| `voice-input`  | When present, a 🎤 button is rendered next to the chat textarea; pressing it dictates via SpeechRecognition into the textarea so the user can review/edit before pressing **Check**. |
+| `voice-output` | When present, validation failures are read aloud via SpeechSynthesis.                                                                                                                |
 
-## Fill-from-text
+## Conversational flow
 
-Declare what each input represents via the `ai-extract` attribute (natural language, any language), then click **📋 Paste & fill** on the toolbar. Paste a free-text blurb, click **Apply**, and the component calls Chrome's Prompt API to extract values and fill matching inputs by `name`.
+When the Prompt API is available, `<ai-form>` renders a chat UI above the slotted `<form>`:
+
+1. An instructional prompt listing the `required` AI-candidate fields (and optional ones), plus a reminder about any required manual fields.
+2. A free-text textarea (+ optional mic).
+3. A **Check** button.
+
+The user types or dictates an answer and clicks **Check**. The component calls the Prompt API with every field's `ai-extract` hint, parses the JSON response and writes the extracted values into the matching inputs (by `name`), dispatching `input` + `change` events so any consumer bindings stay in sync. If something is missing, the prompt updates ("¿Me dices tu teléfono?"). When `form.checkValidity()` passes — i.e. every required field (AI or manual) is filled and no semantic rule failed — a **Submit** button appears.
 
 ```html
-<input name="telefono" ai-extract="número de móvil" />
+<input name="telefono" ai-extract="número de móvil" required />
 ```
+
+AI-candidates are **strictly opt-in** via `ai-extract`. Inputs without it — file uploads, checkboxes, `<select>`, dates, or plain text without a hint — are left for the user to fill manually and mentioned in the prompt when required.
 
 ## Semantic validation
 
@@ -81,34 +93,37 @@ If the Prompt API is unavailable, validation is skipped and native HTML5 validat
 
 ## Voice I/O
 
-Opt in with attributes on `<ai-form>`. Mark the inputs that should receive dictated text with `ai-voice`:
+Opt in with attributes on `<ai-form>`. The mic dictates into the chat textarea so the user can review/edit before pressing **Check** — you no longer need to tag individual inputs.
 
 ```html
 <ai-form language="es-ES" voice-input voice-output>
   <form>
-    <input name="ciudad" ai-voice />
-    <textarea name="comentario" ai-voice ai-validate="tono profesional"></textarea>
-    <button type="submit">Enviar</button>
+    <input name="ciudad" ai-extract="ciudad donde vive" required />
+    <textarea
+      name="comentario"
+      ai-extract="comentario libre"
+      ai-validate="tono profesional"
+    ></textarea>
   </form>
 </ai-form>
 ```
 
-- Click the toolbar 🎤 button to start dictating into the focused `[ai-voice]` input (or the first `[ai-voice]` input when nothing is focused). Click again to stop. A browser without `SpeechRecognition` keeps the button disabled.
+- Click the 🎤 next to the chat textarea to start dictating. Click again to stop. A browser without `SpeechRecognition` keeps the button disabled.
 - When `voice-output` is present and validation fails on submit, the collected reasons are read aloud in `language`. `SpeechSynthesis` must be available; otherwise this is a no-op.
 
 ## Events
 
-Inherits `ai-ready` / `ai-unavailable` from [`AIElement`](../ai-core#events). Emits additionally:
+Inherits `ai-ready` / `ai-unavailable` / `ai-download-*` from [`AIElement`](../ai-core#events). Emits additionally:
 
-| Event                    | Detail                             | Fired when                                                                  |
-| ------------------------ | ---------------------------------- | --------------------------------------------------------------------------- |
-| `ai-paste-assist-start`  | —                                  | User opens the paste panel.                                                 |
-| `ai-paste-assist-result` | `{ fields: [{name, value}], raw }` | Paste-assist succeeded; listed fields have been filled.                     |
-| `ai-no-match`            | `{ reason, response?, parsed? }`   | No usable data extracted, or no slotted inputs had `ai-extract`.            |
-| `ai-validation-start`    | `{ fields: string[] }`             | Semantic validation started on submit.                                      |
-| `ai-validation-passed`   | `{ results: ValidationResult[] }`  | Every field satisfied its rule; submit proceeds natively.                   |
-| `ai-validation-failed`   | `{ results: ValidationResult[] }`  | At least one rule failed; submit blocked and `reportValidity()` called.     |
-| `ai-error`               | `{ error, stage }`                 | An AI call failed (`stage` is `'paste-assist'` or `'semantic-validation'`). |
+| Event                    | Detail                                             | Fired when                                                                          |
+| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `ai-conversation-update` | `{ pendingAIFields, pendingManualFields, prompt }` | The chat state (prompt or complete flag) changed.                                   |
+| `ai-field-extracted`     | `{ name, value }`                                  | The AI wrote a value into a slotted input.                                          |
+| `ai-no-match`            | `{ reason, response?, parsed? }`                   | An extraction round produced no fields (no `ai-extract`, empty JSON, …).            |
+| `ai-validation-start`    | `{ fields: string[] }`                             | Semantic validation started on submit.                                              |
+| `ai-validation-passed`   | `{ results: ValidationResult[] }`                  | Every field satisfied its rule; submit proceeds natively.                           |
+| `ai-validation-failed`   | `{ results: ValidationResult[] }`                  | At least one rule failed; submit blocked and `reportValidity()` called.             |
+| `ai-error`               | `{ error, stage }`                                 | An AI call failed (`stage` is `'conversation-extract'` or `'semantic-validation'`). |
 
 ## License
 
