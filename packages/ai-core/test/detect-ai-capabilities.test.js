@@ -38,13 +38,13 @@ describe('detectAICapabilities()', () => {
   it('reports all APIs as unavailable in a bare jsdom environment', async () => {
     // jsdom does not implement Chrome AI APIs or Web Speech APIs.
     // Strip anything a previous test left behind just in case.
-    delete /** @type {Record<string, unknown>} */ (globalThis).LanguageModel;
-    delete /** @type {Record<string, unknown>} */ (globalThis).Writer;
-    delete /** @type {Record<string, unknown>} */ (globalThis).Summarizer;
-    delete /** @type {Record<string, unknown>} */ (globalThis).Translator;
-    delete /** @type {Record<string, unknown>} */ (globalThis).SpeechRecognition;
-    delete /** @type {Record<string, unknown>} */ (globalThis).webkitSpeechRecognition;
-    delete /** @type {Record<string, unknown>} */ (globalThis).speechSynthesis;
+    delete (/** @type {Record<string, unknown>} */ (globalThis).LanguageModel);
+    delete (/** @type {Record<string, unknown>} */ (globalThis).Writer);
+    delete (/** @type {Record<string, unknown>} */ (globalThis).Summarizer);
+    delete (/** @type {Record<string, unknown>} */ (globalThis).Translator);
+    delete (/** @type {Record<string, unknown>} */ (globalThis).SpeechRecognition);
+    delete (/** @type {Record<string, unknown>} */ (globalThis).webkitSpeechRecognition);
+    delete (/** @type {Record<string, unknown>} */ (globalThis).speechSynthesis);
 
     const caps = await detectAICapabilities();
 
