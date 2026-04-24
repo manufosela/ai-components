@@ -6,14 +6,28 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <section>
     <h1><code>&lt;ai-form&gt;</code> — live playground</h1>
     <p>
-      Open this page in <strong>Chrome 127+ with the relevant AI flags enabled</strong> (see the
-      <a
-        href="https://developer.chrome.com/docs/ai/built-in"
+      Open this page in <strong>Chrome 138+ with the Built-in AI flags enabled</strong>
+      (<a
+        href="https://developer.chrome.com/docs/ai/get-started"
         target="_blank"
-        rel="noopener noreferrer">Chrome Built-in AI docs</a
-      >) to see the enriched UI. Otherwise, the component renders the raw <code>&lt;form&gt;</code> and
-      you get native HTML5 validation — the form still works.
+        rel="noopener noreferrer">requirements & setup</a
+      >). The component detects capability on mount:
     </p>
+    <ul>
+      <li>
+        <strong>AI available</strong> → toolbar enabled, everything works.
+      </li>
+      <li>
+        <strong>AI downloadable</strong> → banner with <em>Enable AI</em> button that triggers the
+        one-time Gemini Nano download (~2 GB).
+      </li>
+      <li>
+        <strong>AI downloading</strong> → banner with live progress bar.
+      </li>
+      <li>
+        <strong>AI unsupported</strong> → native HTML5 form with a small explanatory notice.
+      </li>
+    </ul>
   </section>
 
   <section>
@@ -164,6 +178,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const events = [
       'ai-ready',
       'ai-unavailable',
+      'ai-download-start',
+      'ai-download-progress',
+      'ai-download-complete',
+      'ai-download-error',
       'ai-paste-assist-start',
       'ai-paste-assist-result',
       'ai-no-match',

@@ -1,6 +1,7 @@
 /**
- * Capability states reported for each AI API.
- * @typedef {'available' | 'downloadable' | 'unavailable'} AICapabilityState
+ * Capability states reported for each AI API. Mirrors Chrome's availability()
+ * shape exactly (see https://developer.chrome.com/docs/ai/get-started).
+ * @typedef {'available' | 'downloadable' | 'downloading' | 'unavailable'} AICapabilityState
  */
 
 /**
@@ -15,17 +16,17 @@
  */
 
 /**
- * Normalize a Chrome AI availability() response to our tri-state.
- * Accepts both the current shape ('available' | 'downloadable' | 'downloading' | 'unavailable')
- * and the legacy one ('readily' | 'after-download' | 'no').
+ * Normalize a Chrome AI availability() response. Accepts both the current
+ * shape ('available' | 'downloadable' | 'downloading' | 'unavailable') and
+ * the legacy one ('readily' | 'after-download' | 'no'), preserving the
+ * distinction between 'downloadable' and 'downloading'.
  * @param {unknown} raw
  * @returns {AICapabilityState}
  */
 function normalizeState(raw) {
   if (raw === 'available' || raw === 'readily') return 'available';
-  if (raw === 'downloadable' || raw === 'downloading' || raw === 'after-download') {
-    return 'downloadable';
-  }
+  if (raw === 'downloading') return 'downloading';
+  if (raw === 'downloadable' || raw === 'after-download') return 'downloadable';
   return 'unavailable';
 }
 

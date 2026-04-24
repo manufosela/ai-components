@@ -76,7 +76,7 @@ describe('detectAICapabilities()', () => {
     expect(caps.writer).toBe('available');
   });
 
-  it('normalizes "downloadable", "downloading" and legacy "after-download" to "downloadable"', async () => {
+  it('keeps "downloadable" and legacy "after-download" as "downloadable"', async () => {
     /** @type {Record<string, unknown>} */ (globalThis).Summarizer = {
       availability: async () => 'downloadable',
     };
@@ -87,6 +87,15 @@ describe('detectAICapabilities()', () => {
     const caps = await detectAICapabilities();
     expect(caps.summarizer).toBe('downloadable');
     expect(caps.translator).toBe('downloadable');
+  });
+
+  it('reports "downloading" as its own state (distinct from "downloadable")', async () => {
+    /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+      availability: async () => 'downloading',
+    };
+
+    const caps = await detectAICapabilities();
+    expect(caps.prompt).toBe('downloading');
   });
 
   it('falls back to "unavailable" when availability() throws', async () => {
