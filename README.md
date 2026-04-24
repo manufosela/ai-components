@@ -15,12 +15,19 @@ Monorepo of AI web components built with [Lit](https://lit.dev/), powered by Chr
 
 ## Packages
 
-| Package                  | Description                                                                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `@manufosela/ai-core`    | `AIElement` base class (extends `LitElement`) + `detectAICapabilities()` + helpers for Prompt / Writer / Summarizer / Translator. |
-| `@manufosela/ai-testing` | Reusable mocks of Chrome AI + Web Speech APIs for Vitest / jsdom / CI.                                                            |
-| `@manufosela/ai-voice`   | `VoiceMixin` + wrappers over Web Speech API (TTS / STT) with cross-browser detection.                                             |
-| `@manufosela/ai-form`    | `<ai-form>` — wraps a `<form>`, adds fill-from-text, semantic validation and optional voice I/O when AI is available.             |
+The repo follows a clean split:
+
+- **Libraries** (imported, extended or composed — no custom element, no tag):
+  `@manufosela/ai-core`, `@manufosela/ai-voice`, `@manufosela/ai-testing`.
+- **Components** (self-register a custom element on import — one tag per package):
+  `@manufosela/ai-form`. Future components (`ai-summary`, `ai-translate`, …) follow the same rule.
+
+| Package                  | Kind      | Description                                                                                                                       |
+| ------------------------ | --------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `@manufosela/ai-core`    | library   | `AIElement` base class (extends `LitElement`) + `detectAICapabilities()` + helpers for Prompt / Writer / Summarizer / Translator. |
+| `@manufosela/ai-voice`   | library   | `VoiceMixin` + wrappers over Web Speech API (TTS / STT) with cross-browser detection.                                             |
+| `@manufosela/ai-testing` | library   | Reusable mocks of Chrome AI + Web Speech APIs for Vitest / jsdom / CI.                                                            |
+| `@manufosela/ai-form`    | component | `<ai-form>` — wraps a `<form>`, adds fill-from-text, semantic validation and optional voice I/O when AI is available.             |
 
 ## Requirements
 

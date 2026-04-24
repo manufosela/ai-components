@@ -1,5 +1,7 @@
 # @manufosela/ai-form
 
+> **Web component.** Registers the `<ai-form>` custom element on import. Depends on the libraries `@manufosela/ai-core` and `@manufosela/ai-voice`.
+
 `<ai-form>` — wraps a `<form>` and progressively enhances it with Chrome Built-in AI when available:
 
 - Paste free text to auto-fill inputs (AIC-TSK-0008, shipped).
