@@ -1,0 +1,62 @@
+{
+  "name": "@manufosela/ai-testing",
+  "version": "0.1.0",
+  "description": "Reusable mocks of Chrome Built-in AI APIs (LanguageModel, Writer, Summarizer, Translator) and Web Speech APIs for testing AIElement-based components. 100% JavaScript + JSDoc, framework-agnostic.",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./chrome-ai": {
+      "types": "./dist/types/chrome-ai.d.ts",
+      "import": "./src/chrome-ai.js"
+    },
+    "./web-speech": {
+      "types": "./dist/types/web-speech.d.ts",
+      "import": "./src/web-speech.js"
+    }
+  },
+  "files": [
+    "src",
+    "dist/types",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm run build:types",
+    "build:types": "tsc -p tsconfig.types.json",
+    "test": "vitest run --config ../../vitest.config.js --dir test",
+    "test:watch": "vitest --config ../../vitest.config.js --dir test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "testing",
+    "mocks",
+    "chrome-ai",
+    "gemini-nano",
+    "prompt-api",
+    "web-speech-api",
+    "vitest",
+    "jest"
+  ],
+  "author": {
+    "name": "Mánu Fosela",
+    "email": "mjfosela@gmail.com",
+    "url": "https://github.com/manufosela"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/manufosela/ai-components/tree/main/packages/ai-testing#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manufosela/ai-components.git",
+    "directory": "packages/ai-testing"
+  },
+  "bugs": {
+    "url": "https://github.com/manufosela/ai-components/issues"
+  }
+}
