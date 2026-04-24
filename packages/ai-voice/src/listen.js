@@ -4,7 +4,7 @@
  * @property {string}  [lang]           BCP-47 tag (e.g. "es-ES"). Defaults to "en-US".
  * @property {boolean} [continuous]     Keep listening until stopped. Default false.
  * @property {boolean} [interimResults] Emit interim (non-final) results through onInterim.
- * @property {(partial: string) => void} [onInterim] Invoked with interim transcripts as they arrive.
+ * @property {(partial: string, finalSoFar: string) => void} [onInterim] Invoked with the CURRENT interim segment and the accumulated final transcript so far. For a typical live-update UI, render `finalSoFar + partial`.
  * @property {AbortSignal} [signal]     Aborts the recognition; resolves with whatever was captured so far.
  */
 
@@ -67,16 +67,21 @@ export function listen(options = {}) {
     };
 
     recognition.onresult = (/** @type {SpeechRecognitionEvent} */ event) => {
+      /** @type {string} */
+      let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
           finalTranscript += result[0].transcript;
-        } else if (interimResults && onInterim) {
-          try {
-            onInterim(result[0].transcript);
-          } catch {
-            /* consumer callback errors must not break recognition */
-          }
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      if (interimResults && onInterim && interim) {
+        try {
+          onInterim(interim, finalTranscript);
+        } catch {
+          /* consumer callback errors must not break recognition */
         }
       }
     };

@@ -121,15 +121,20 @@ describe('listen()', () => {
     await expect(p).resolves.toBe('hello world');
   });
 
-  it('ignores interim results in the returned transcript and forwards them via onInterim', async () => {
+  it('forwards interim results via onInterim with (interim, finalSoFar) and keeps only finals in the resolved transcript', async () => {
     const onInterim = vi.fn();
     const p = listen({ interimResults: true, onInterim });
     const inst = Ctor.lastInstance;
+    // Interim before any final: finalSoFar = "".
     inst.onresult?.(resultEvent([{ transcript: 'inter', isFinal: false }]));
-    inst.onresult?.(resultEvent([{ transcript: 'final' }]));
+    // Final commits; next interim should see finalSoFar = "hello ".
+    inst.onresult?.(resultEvent([{ transcript: 'hello ' }]));
+    inst.onresult?.(resultEvent([{ transcript: 'there', isFinal: false }]));
+    inst.onresult?.(resultEvent([{ transcript: 'world' }]));
     inst.onend?.();
-    await expect(p).resolves.toBe('final');
-    expect(onInterim).toHaveBeenCalledWith('inter');
+    await expect(p).resolves.toBe('hello world');
+    expect(onInterim).toHaveBeenCalledWith('inter', '');
+    expect(onInterim).toHaveBeenCalledWith('there', 'hello ');
   });
 
   it('rejects with a descriptive error when recognition fails', async () => {

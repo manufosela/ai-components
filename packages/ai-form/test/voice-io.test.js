@@ -97,7 +97,7 @@ describe('<ai-form> voice I/O', () => {
   });
 
   describe('dictation into the chat textarea', () => {
-    it('writes the transcript into the chat textarea', async () => {
+    it('writes the transcript into the chat textarea and uses continuous + interim results', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'available' } });
       cleanups.push(teardown);
       const speech = setupWebSpeechMock();
@@ -110,6 +110,10 @@ describe('<ai-form> voice I/O', () => {
       await el.updateComplete;
 
       const inst = speech.RecognitionCtor.instances.at(-1);
+      // Chat dictation must not stop at the first pause.
+      expect(inst.continuous).toBe(true);
+      expect(inst.interimResults).toBe(true);
+
       inst.fireResult([{ transcript: 'Me llamo Manu' }]);
       inst.fireEnd();
 

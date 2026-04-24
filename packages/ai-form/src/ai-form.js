@@ -1135,8 +1135,9 @@ export class AIForm extends VoiceMixin(AIElement) {
 
   /**
    * Toggle a voice-input dictation session. In conversational mode the
-   * transcript is written into the chat textarea (replacing any prior
-   * content) so the user can review/edit before pressing "Check".
+   * transcript is written into the chat textarea live (continuous +
+   * interim results) so the user can dictate a full message and see it
+   * appear as they speak. Click the mic again (or the send button) to stop.
    * @returns {Promise<void>}
    */
   async _toggleVoiceInput() {
@@ -1144,10 +1145,22 @@ export class AIForm extends VoiceMixin(AIElement) {
       this.stopSpeechInput();
       return;
     }
+    // Remember what was already in the textarea so interim + final
+    // results are appended to it rather than replacing it.
+    const prefix = this._chatInput ? this._chatInput.replace(/\s+$/, '') + ' ' : '';
     try {
-      const transcript = await this.startSpeechInput({ lang: this.language });
-      if (transcript == null || transcript === '') return;
-      this._chatInput = transcript;
+      const transcript = await this.startSpeechInput({
+        lang: this.language,
+        continuous: true,
+        interimResults: true,
+        onInterim: (partial, finalSoFar) => {
+          // Live update: show final-so-far + what's being heard right now.
+          this._chatInput = prefix + finalSoFar + partial;
+        },
+      });
+      if (transcript == null) return;
+      // On end, commit the final transcript (or whatever was captured).
+      this._chatInput = (prefix + transcript).trim();
     } catch {
       // VoiceMixin already emitted voice-error; nothing more to do here.
     }
