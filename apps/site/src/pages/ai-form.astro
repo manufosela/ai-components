@@ -1,0 +1,214 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="<ai-form> playground">
+  <section>
+    <h1><code>&lt;ai-form&gt;</code> — live playground</h1>
+    <p>
+      Open this page in <strong>Chrome 127+ with the relevant AI flags enabled</strong> (see the
+      <a
+        href="https://developer.chrome.com/docs/ai/built-in"
+        target="_blank"
+        rel="noopener noreferrer">Chrome Built-in AI docs</a
+      >) to see the enriched UI. Otherwise, the component renders the raw <code>&lt;form&gt;</code> and
+      you get native HTML5 validation — the form still works.
+    </p>
+  </section>
+
+  <section>
+    <h2>Demo form</h2>
+
+    <div class="toolbar-row card">
+      <label>
+        <input type="checkbox" id="toggle-voice-input" checked />
+        <code>voice-input</code>
+      </label>
+      <label>
+        <input type="checkbox" id="toggle-voice-output" checked />
+        <code>voice-output</code>
+      </label>
+      <button type="button" id="clear-log">Clear event log</button>
+    </div>
+
+    <ai-form id="demo" language="es-ES" voice-input voice-output>
+      <form>
+        <label>
+          <span>Nombre</span>
+          <input
+            name="nombre"
+            ai-extract="nombre completo"
+            ai-voice
+            ai-validate="at least two words, no digits"
+            required
+          />
+        </label>
+        <label>
+          <span>Teléfono</span>
+          <input
+            name="telefono"
+            type="tel"
+            ai-extract="número de móvil"
+            ai-validate="spanish mobile (9 digits, starting with 6 or 7)"
+          />
+        </label>
+        <label>
+          <span>Email</span>
+          <input name="email" type="email" ai-extract="dirección de email" />
+        </label>
+        <label>
+          <span>Comentario</span>
+          <textarea
+            name="about"
+            ai-voice
+            ai-validate="tono profesional, máximo 200 palabras"
+            rows="3"></textarea>
+        </label>
+        <div class="actions">
+          <button type="submit">Enviar</button>
+          <button type="reset">Reset</button>
+        </div>
+      </form>
+    </ai-form>
+  </section>
+
+  <section>
+    <h2>Event log</h2>
+    <p>Everything the component emits. Bubbled and <code>composed: true</code>, so this page catches them all.</p>
+    <pre id="event-log" aria-live="polite">(waiting for capability detection…)</pre>
+  </section>
+
+  <section>
+    <h2>Try pasting this</h2>
+    <p>Click <strong>📋 Paste &amp; fill</strong> and paste:</p>
+    <pre><code>Soy Juan Pérez, móvil 666 12 34 56 y juan.perez@example.com. Me interesa vuestro producto para mi equipo, por favor contactadme.</code></pre>
+    <p>
+      The Prompt API should return structured JSON that fills <code>nombre</code>, <code>telefono</code>
+      and <code>email</code>. The textarea is left alone because it has no <code>ai-extract</code>.
+    </p>
+  </section>
+
+  <style>
+    section {
+      margin-bottom: 2rem;
+    }
+    .toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    ai-form form {
+      display: grid;
+      gap: 0.75rem;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+    }
+    ai-form label {
+      display: grid;
+      gap: 0.25rem;
+    }
+    ai-form label span {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    ai-form input,
+    ai-form textarea {
+      font: inherit;
+      padding: 0.4rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    ai-form input:invalid,
+    ai-form textarea:invalid {
+      border-color: var(--danger);
+    }
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+    button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--fg);
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font: inherit;
+    }
+    button[type='submit'] {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+  </style>
+
+  <script>
+    import '@manufosela/ai-form';
+
+    const form = /** @type {any} */ (document.getElementById('demo'));
+    const log = /** @type {HTMLPreElement} */ (document.getElementById('event-log'));
+    const toggleIn = /** @type {HTMLInputElement} */ (
+      document.getElementById('toggle-voice-input')
+    );
+    const toggleOut = /** @type {HTMLInputElement} */ (
+      document.getElementById('toggle-voice-output')
+    );
+    const clear = /** @type {HTMLButtonElement} */ (document.getElementById('clear-log'));
+
+    const events = [
+      'ai-ready',
+      'ai-unavailable',
+      'ai-paste-assist-start',
+      'ai-paste-assist-result',
+      'ai-no-match',
+      'ai-error',
+      'ai-validation-start',
+      'ai-validation-passed',
+      'ai-validation-failed',
+      'voice-transcript',
+      'voice-start',
+      'voice-end',
+      'voice-error',
+      'voice-unavailable',
+    ];
+
+    /** @type {string[]} */
+    const lines = [];
+    /** @param {string} name @param {any} detail */
+    function append(name, detail) {
+      const time = new Date().toLocaleTimeString();
+      const serialized = detail ? JSON.stringify(detail, replaceError, 2) : '';
+      lines.unshift(`[${time}] ${name}${serialized ? ' ' + serialized : ''}`);
+      if (lines.length > 100) lines.length = 100;
+      log.textContent = lines.join('\n');
+    }
+
+    /** @param {string} _k @param {unknown} v */
+    function replaceError(_k, v) {
+      if (v instanceof Error) return { name: v.name, message: v.message };
+      if (v instanceof Element) return `<${v.tagName.toLowerCase()}>`;
+      return v;
+    }
+
+    for (const evt of events) {
+      form.addEventListener(evt, (/** @type {CustomEvent} */ e) => append(evt, e.detail));
+    }
+
+    toggleIn.addEventListener('change', () => {
+      form.toggleAttribute('voice-input', toggleIn.checked);
+    });
+    toggleOut.addEventListener('change', () => {
+      form.toggleAttribute('voice-output', toggleOut.checked);
+    });
+    clear.addEventListener('click', () => {
+      lines.length = 0;
+      log.textContent = '(cleared)';
+    });
+  </script>
+</BaseLayout>

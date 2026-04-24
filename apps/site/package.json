@@ -1,0 +1,17 @@
+{
+  "name": "@manufosela/ai-components-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Documentation site and live playground for the @manufosela ai-components monorepo.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@manufosela/ai-form": "workspace:*",
+    "astro": "^5.0.0"
+  }
+}

@@ -1,0 +1,118 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<BaseLayout title="@manufosela/ai-components">
+  <section>
+    <h1>Web components, powered by Chrome Built-in AI.</h1>
+    <p>
+      A small monorepo of <a href="https://lit.dev">Lit</a>-based web components that progressively
+      enhance with <strong>Chrome's Prompt / Writer / Summarizer / Translator / Speech APIs</strong>
+      when available, and gracefully fall back to the plain HTML underneath when they're not.
+    </p>
+    <p>
+      <span class="pill good">100% JavaScript + JSDoc</span>
+      <span class="pill">No TypeScript</span>
+      <span class="pill warn">Types shipped as .d.ts</span>
+    </p>
+  </section>
+
+  <section>
+    <h2>Packages</h2>
+    <div class="grid-2">
+      <article class="card">
+        <h3><code>@manufosela/ai-core</code></h3>
+        <p>
+          <code>AIElement</code> base class, <code>detectAICapabilities()</code> and helpers (<code
+            >prompt</code
+          >, <code>summarize</code>, <code>write</code>, <code>translate</code>) over the Chrome AI
+          APIs.
+        </p>
+      </article>
+      <article class="card">
+        <h3><code>@manufosela/ai-voice</code></h3>
+        <p>
+          <code>VoiceMixin</code> + promisified wrappers over
+          <code>SpeechRecognition</code> and <code>SpeechSynthesis</code>.
+        </p>
+      </article>
+      <article class="card">
+        <h3><code>@manufosela/ai-testing</code></h3>
+        <p>
+          Reusable mocks of Chrome AI + Web Speech APIs for Vitest / Jest / anything.
+          Framework-agnostic.
+        </p>
+      </article>
+      <article class="card">
+        <h3><code>@manufosela/ai-form</code></h3>
+        <p>
+          <code>&lt;ai-form&gt;</code> &mdash; wraps a <code>&lt;form&gt;</code>, adds fill-from-text,
+          semantic validation and optional voice I/O. <a href={`${base}/ai-form/`}>Try it &rarr;</a>
+        </p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Install</h2>
+    <pre><code>npm install @manufosela/ai-form @manufosela/ai-core</code></pre>
+  </section>
+
+  <section>
+    <h2>Browser &amp; capability matrix</h2>
+    <p>
+      The components detect capability at mount time and fire <code>ai-ready</code> or <code
+        >ai-unavailable</code
+      >. You never need to feature-detect by hand.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Capability</th>
+          <th>Chrome 127+</th>
+          <th>Other browsers</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Prompt / Writer / Summarizer / Translator</td>
+          <td><span class="pill good">available</span></td>
+          <td><span class="pill">fallback: native HTML</span></td>
+        </tr>
+        <tr>
+          <td>SpeechRecognition (STT)</td>
+          <td><span class="pill good">available</span></td>
+          <td>
+            <span class="pill warn">partial</span> (webkit prefix on Safari; N/A on Firefox)
+          </td>
+        </tr>
+        <tr>
+          <td>SpeechSynthesis (TTS)</td>
+          <td><span class="pill good">available</span></td>
+          <td><span class="pill good">available</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <style>
+      section {
+        margin-bottom: 2rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.5rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+      }
+      thead th {
+        background: var(--card);
+      }
+    </style>
+  </section>
+</BaseLayout>

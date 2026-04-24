@@ -1,0 +1,163 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="API reference · @manufosela/ai-components">
+  <section>
+    <h1>API reference</h1>
+    <p>
+      Quick reference for every published export. The full, typed signatures ship as
+      <code>.d.ts</code> files generated from the JSDoc in the sources.
+    </p>
+  </section>
+
+  <section id="ai-core">
+    <h2><code>@manufosela/ai-core</code></h2>
+
+    <h3><code>AIElement</code></h3>
+    <p>Extends <code>LitElement</code>. Subclasses override:</p>
+    <ul>
+      <li><code>renderAI()</code> — UI when at least one core AI API is usable.</li>
+      <li><code>renderFallback()</code> — UI when AI is unavailable.</li>
+    </ul>
+    <p>Reactive state:</p>
+    <ul>
+      <li><code>aiAvailable: boolean</code></li>
+      <li><code>aiCapabilities: AICapabilities | null</code></li>
+    </ul>
+    <p>Events (bubbled + composed):</p>
+    <ul>
+      <li>
+        <code>ai-ready</code> / <code>ai-unavailable</code> — detail:
+        <code>{'{ capabilities }'}</code>
+      </li>
+    </ul>
+
+    <h3><code>detectAICapabilities()</code></h3>
+    <p>
+      Returns <code>
+        {'Promise<{ prompt, writer, summarizer, translator, speechIn, speechOut }>'}
+      </code>. Never throws.
+    </p>
+
+    <h3>Helpers</h3>
+    <ul>
+      <li><code>prompt(input, options?)</code> → <code>Promise&lt;string&gt;</code></li>
+      <li><code>summarize(input, options?)</code> → <code>Promise&lt;string&gt;</code></li>
+      <li><code>write(input, options?)</code> → <code>Promise&lt;string&gt;</code></li>
+      <li><code>translate(input, options?)</code> → <code>Promise&lt;string&gt;</code></li>
+    </ul>
+    <p>
+      Every helper creates a session, performs one call and destroys the session. Destroy errors are
+      swallowed so they can't mask the real result/error.
+    </p>
+  </section>
+
+  <section id="ai-voice">
+    <h2><code>@manufosela/ai-voice</code></h2>
+
+    <h3><code>VoiceMixin(Base)</code></h3>
+    <p>Factory mixin for any <code>LitElement</code> subclass. Adds:</p>
+    <ul>
+      <li>
+        Reactive <code>listening</code>, <code>speaking</code>, <code>speechInAvailable</code>,
+        <code>speechOutAvailable</code>.
+      </li>
+      <li>
+        Methods <code>startSpeechInput(options)</code>, <code>stopSpeechInput()</code>,
+        <code>speak(text, options)</code>.
+      </li>
+      <li>
+        Events <code>voice-transcript</code>, <code>voice-start</code>, <code>voice-end</code>,
+        <code>voice-error</code>, <code>voice-unavailable</code>.
+      </li>
+    </ul>
+
+    <h3>Standalone helpers</h3>
+    <ul>
+      <li>
+        <code>listen(options?)</code> — promisified SpeechRecognition with <code>AbortSignal</code> and
+        optional <code>onInterim</code>.
+      </li>
+      <li>
+        <code>speak(text, options?)</code> — promisified SpeechSynthesis with <code>AbortSignal</code>.
+      </li>
+      <li><code>isListenAvailable()</code> / <code>isSpeakAvailable()</code></li>
+    </ul>
+  </section>
+
+  <section id="ai-testing">
+    <h2><code>@manufosela/ai-testing</code></h2>
+    <p>Framework-agnostic mocks with a tiny internal spy (<code>fn.calls</code>).</p>
+    <ul>
+      <li>
+        <code>setupChromeAIMock(config)</code> → <code>{'{ mocks, teardown }'}</code>. Installs fakes for
+        <code>LanguageModel</code>, <code>Writer</code>, <code>Summarizer</code>, <code>Translator</code>
+        on <code>globalThis</code> per the keys you pass.
+      </li>
+      <li>
+        <code>setupWebSpeechMock(config?)</code> → <code>
+          {'{ RecognitionCtor, synth, UtteranceCtor, drive, teardown }'}
+        </code>. Installs SpeechRecognition / SpeechSynthesis / SpeechSynthesisUtterance.
+      </li>
+      <li>
+        Low-level factories:
+        <code>createLanguageModelMock</code>, <code>createWriterMock</code>,
+        <code>createSummarizerMock</code>, <code>createTranslatorMock</code>,
+        <code>createSpeechRecognitionMock</code>, <code>createSynthMock</code>.
+      </li>
+    </ul>
+    <p>
+      Every factory accepts a config: <code>availability</code>, <code>response</code> (string or
+      <code>(input) =&gt; string</code>), <code>responses</code> (rotating list) and <code
+        >rejectCreate</code
+      >.
+    </p>
+  </section>
+
+  <section id="ai-form">
+    <h2><code>@manufosela/ai-form</code></h2>
+    <h3><code>&lt;ai-form&gt;</code></h3>
+    <p>Attributes:</p>
+    <ul>
+      <li><code>language</code> — BCP-47 tag; default <code>"en-US"</code>.</li>
+      <li><code>voice-input</code> — enable the toolbar 🎤 button (requires SpeechRecognition).</li>
+      <li><code>voice-output</code> — read validation failures aloud (requires SpeechSynthesis).</li>
+    </ul>
+    <p>Slotted input attributes:</p>
+    <ul>
+      <li>
+        <code>ai-extract="&lt;description&gt;"</code> — target for paste-assist fill.
+      </li>
+      <li>
+        <code>ai-validate="&lt;rule&gt;"</code> — natural-language validation rule evaluated on
+        submit.
+      </li>
+      <li>
+        <code>ai-voice</code> — valid target for dictation (focused one wins, then first in DOM).
+      </li>
+    </ul>
+    <p>Custom events (on top of <code>AIElement</code> + <code>VoiceMixin</code>):</p>
+    <ul>
+      <li>
+        <code>ai-paste-assist-start</code>, <code>ai-paste-assist-result</code>, <code>ai-no-match</code>.
+      </li>
+      <li>
+        <code>ai-validation-start</code>, <code>ai-validation-passed</code>, <code>ai-validation-failed</code>.
+      </li>
+      <li><code>ai-error</code> — <code>detail.stage</code> is <code>'paste-assist'</code> or <code>'semantic-validation'</code>.</li>
+    </ul>
+  </section>
+
+  <style>
+    section {
+      margin-bottom: 2rem;
+    }
+    h3 {
+      margin-top: 1.25rem;
+    }
+    ul {
+      margin-top: 0.25rem;
+    }
+  </style>
+</BaseLayout>
