@@ -1,35 +1,46 @@
-import tsPlugin from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
+import js from '@eslint/js';
+import jsdoc from 'eslint-plugin-jsdoc';
 import prettierConfig from 'eslint-config-prettier';
 
 export default [
   {
     ignores: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.astro/**', '**/coverage/**'],
   },
+  js.configs.recommended,
+  jsdoc.configs['flat/recommended'],
   {
-    files: ['**/*.{ts,js}'],
+    files: ['**/*.js'],
     languageOptions: {
-      parser: tsParser,
       ecmaVersion: 'latest',
       sourceType: 'module',
-      parserOptions: {
-        projectService: true,
+      globals: {
+        globalThis: 'readonly',
+        window: 'readonly',
+        document: 'readonly',
+        customElements: 'readonly',
+        HTMLElement: 'readonly',
+        CustomEvent: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
       },
     },
     plugins: {
-      '@typescript-eslint': tsPlugin,
+      jsdoc,
     },
     rules: {
-      ...tsPlugin.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
-      '@typescript-eslint/consistent-type-imports': [
-        'error',
-        { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
-      ],
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'jsdoc/require-jsdoc': 'off',
+      'jsdoc/require-param-description': 'off',
+      'jsdoc/require-returns-description': 'off',
+      'jsdoc/no-undefined-types': 'off',
+      'jsdoc/valid-types': 'warn',
+      'jsdoc/check-types': 'warn',
+      'jsdoc/check-param-names': 'error',
+      'jsdoc/check-tag-names': [
+        'warn',
+        { definedTags: ['customElement', 'fires', 'slot', 'csspart'] },
+      ],
     },
   },
   prettierConfig,

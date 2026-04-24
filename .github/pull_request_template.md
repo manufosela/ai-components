@@ -16,7 +16,6 @@
 
 - [ ] Unit tests added/updated
 - [ ] `pnpm lint` passes
-- [ ] `pnpm typecheck` passes
 - [ ] `pnpm test` passes
 - [ ] `pnpm build` passes
 - [ ] Changeset added if this touches a published package (`pnpm changeset`)
