@@ -1,5 +1,7 @@
 # @manufosela/ai-core
 
+> **Library.** No custom element, no tag. Exports a base class (`AIElement`), a capability detection function (`detectAICapabilities`) and thin helpers over the Chrome AI APIs. Designed to be imported and extended — not to be registered with `customElements.define`.
+
 Base class and helpers for building web components backed by Chrome Built-in AI.
 
 **100% JavaScript + JSDoc.** Published `.d.ts` generated from JSDoc for full type support in consumers.

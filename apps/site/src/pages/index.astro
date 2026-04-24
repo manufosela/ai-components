@@ -20,9 +20,13 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 
   <section>
     <h2>Packages</h2>
+    <p>
+      Three libraries you import and one web component that registers a tag on import.
+      Future components (<code>ai-summary</code>, <code>ai-translate</code>, …) follow the same rule.
+    </p>
     <div class="grid-2">
       <article class="card">
-        <h3><code>@manufosela/ai-core</code></h3>
+        <h3><code>@manufosela/ai-core</code> <span class="pill">library</span></h3>
         <p>
           <code>AIElement</code> base class, <code>detectAICapabilities()</code> and helpers (<code
             >prompt</code
@@ -31,21 +35,21 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
         </p>
       </article>
       <article class="card">
-        <h3><code>@manufosela/ai-voice</code></h3>
+        <h3><code>@manufosela/ai-voice</code> <span class="pill">library</span></h3>
         <p>
           <code>VoiceMixin</code> + promisified wrappers over
           <code>SpeechRecognition</code> and <code>SpeechSynthesis</code>.
         </p>
       </article>
       <article class="card">
-        <h3><code>@manufosela/ai-testing</code></h3>
+        <h3><code>@manufosela/ai-testing</code> <span class="pill">library</span></h3>
         <p>
           Reusable mocks of Chrome AI + Web Speech APIs for Vitest / Jest / anything.
           Framework-agnostic.
         </p>
       </article>
       <article class="card">
-        <h3><code>@manufosela/ai-form</code></h3>
+        <h3><code>@manufosela/ai-form</code> <span class="pill good">component</span></h3>
         <p>
           <code>&lt;ai-form&gt;</code> &mdash; wraps a <code>&lt;form&gt;</code>, adds fill-from-text,
           semantic validation and optional voice I/O. <a href={`${base}/ai-form/`}>Try it &rarr;</a>

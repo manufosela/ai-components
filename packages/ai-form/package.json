@@ -1,7 +1,7 @@
 {
   "name": "@manufosela/ai-form",
   "version": "0.1.0",
-  "description": "<ai-form> web component: wraps a <form>, progressively enhances it with Chrome Built-in AI (fill-from-text, semantic validation, voice I/O) when available. 100% JavaScript + JSDoc.",
+  "description": "Web component: <ai-form> wraps a <form> and progressively enhances it with Chrome Built-in AI (fill-from-text, semantic validation, voice I/O) when available. Registers itself on import. 100% JavaScript + JSDoc.",
   "type": "module",
   "main": "./src/index.js",
   "types": "./dist/types/index.d.ts",

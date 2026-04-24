@@ -1,7 +1,7 @@
 {
   "name": "@manufosela/ai-core",
   "version": "0.1.0",
-  "description": "AIElement base class, detectAICapabilities() and helpers for Chrome Built-in AI. 100% JavaScript + JSDoc.",
+  "description": "Library: AIElement base class, detectAICapabilities() and helpers for Chrome Built-in AI. No custom element, no tag — import, extend, compose. 100% JavaScript + JSDoc.",
   "type": "module",
   "main": "./src/index.js",
   "types": "./dist/types/index.d.ts",
@@ -42,8 +42,9 @@
     "access": "public"
   },
   "keywords": [
+    "library",
     "lit",
-    "web-components",
+    "base-class",
     "ai",
     "chrome-ai",
     "gemini-nano",

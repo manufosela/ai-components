@@ -1,5 +1,7 @@
 # @manufosela/ai-voice
 
+> **Library.** No custom element, no tag. Exports a factory mixin (`VoiceMixin`) that decorates any class with voice I/O, plus two standalone Web Speech helpers (`listen`, `speak`). Does not import Lit — the mixin augments whatever Base class you pass it (typically `LitElement` or `AIElement`).
+
 `VoiceMixin` and standalone Web Speech API helpers (`SpeechRecognition` + `SpeechSynthesis`) for AIElement-based web components.
 
 **100% JavaScript + JSDoc.** Published `.d.ts` generated from JSDoc.

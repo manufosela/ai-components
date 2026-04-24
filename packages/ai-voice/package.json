@@ -1,7 +1,7 @@
 {
   "name": "@manufosela/ai-voice",
   "version": "0.1.0",
-  "description": "VoiceMixin + Web Speech API helpers (SpeechRecognition / SpeechSynthesis) for AIElement-based web components. 100% JavaScript + JSDoc.",
+  "description": "Library: VoiceMixin + Web Speech API helpers (SpeechRecognition / SpeechSynthesis) for any LitElement-based web component. 100% JavaScript + JSDoc. Framework-agnostic — the mixin decorates any Base class and does not import lit.",
   "type": "module",
   "main": "./src/index.js",
   "types": "./dist/types/index.d.ts",
@@ -35,20 +35,20 @@
     "test": "vitest run --config ../../vitest.config.js --dir test",
     "test:watch": "vitest --config ../../vitest.config.js --dir test"
   },
-  "dependencies": {
-    "lit": "^3.2.0"
-  },
   "publishConfig": {
     "access": "public"
   },
+  "devDependencies": {
+    "lit": "^3.2.0"
+  },
   "keywords": [
+    "library",
     "lit",
-    "web-components",
+    "mixin",
     "voice",
     "speech-recognition",
     "speech-synthesis",
-    "web-speech-api",
-    "ai-mixin"
+    "web-speech-api"
   ],
   "author": {
     "name": "Mánu Fosela",

@@ -1,5 +1,7 @@
 # @manufosela/ai-testing
 
+> **Library (devDependency).** No custom element, no tag. Exports setup functions and low-level factories for mocking Chrome AI + Web Speech APIs inside tests.
+
 Reusable mocks of Chrome Built-in AI APIs (LanguageModel, Writer, Summarizer, Translator) and Web Speech APIs (SpeechRecognition, SpeechSynthesis) for testing `AIElement`-based components.
 
 **100% JavaScript + JSDoc. Framework-agnostic** — no peer dependency on Vitest / Jest / mocha. A tiny internal spy tracks calls via a `.calls` array; wrap with your own spy library if you need more.
