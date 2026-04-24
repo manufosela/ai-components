@@ -79,8 +79,12 @@ describe('<ai-form> (skeleton)', () => {
 
     const buttons = toolbar.querySelectorAll('button');
     expect(buttons.length).toBe(2);
-    // Skeleton: placeholders are disabled.
-    for (const b of buttons) expect(b.disabled).toBe(true);
+    // Paste & fill is enabled when the Prompt API is available (TSK-0008).
+    const pasteBtn = toolbar.querySelector('button[data-action="paste-assist"]');
+    expect(pasteBtn.disabled).toBe(false);
+    // Voice input is still a placeholder (TSK-0010).
+    const voiceBtn = toolbar.querySelector('button[data-action="voice-input"]');
+    expect(voiceBtn.disabled).toBe(true);
 
     const errors = el.shadowRoot.querySelector('.ai-form-errors');
     expect(errors).not.toBeNull();
