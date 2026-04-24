@@ -51,6 +51,19 @@ importers:
         specifier: ^3.2.0
         version: 3.3.2
 
+  packages/ai-form:
+    dependencies:
+      '@manufosela/ai-core':
+        specifier: workspace:*
+        version: link:../ai-core
+      lit:
+        specifier: ^3.2.0
+        version: 3.3.2
+    devDependencies:
+      '@manufosela/ai-testing':
+        specifier: workspace:*
+        version: link:../ai-testing
+
   packages/ai-testing: {}
 
   packages/ai-voice:
