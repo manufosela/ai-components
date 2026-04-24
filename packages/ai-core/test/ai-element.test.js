@@ -157,4 +157,149 @@ describe('AIElement', () => {
     // No exception means success; shadowRoot should be empty.
     expect(el.shadowRoot?.textContent ?? '').toBe('');
   });
+
+  describe('aiReady vs aiAvailable', () => {
+    it('aiAvailable=true but aiReady=false when API is only "downloadable"', async () => {
+      /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+        availability: async () => 'downloadable',
+      };
+      const tag = defineAISubclass();
+      const el = /** @type {AIElement} */ (mount(tag));
+      await el.aiDetectionComplete;
+      expect(el.aiAvailable).toBe(true);
+      expect(el.aiReady).toBe(false);
+    });
+
+    it('aiReady=true only when at least one API is "available"', async () => {
+      /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+        availability: async () => 'available',
+      };
+      const tag = defineAISubclass();
+      const el = /** @type {AIElement} */ (mount(tag));
+      await el.aiDetectionComplete;
+      expect(el.aiReady).toBe(true);
+    });
+  });
+
+  describe('ensureAIReady()', () => {
+    it('short-circuits when the requested API is already "available"', async () => {
+      /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+        availability: async () => 'available',
+        create: () => {
+          throw new Error('should not be called');
+        },
+      };
+      const tag = defineAISubclass();
+      const el = /** @type {AIElement} */ (mount(tag));
+      await el.aiDetectionComplete;
+      const caps = await /** @type {any} */ (el).ensureAIReady();
+      expect(caps.prompt).toBe('available');
+      expect(/** @type {any} */ (el).aiDownloading).toBe(false);
+    });
+
+    it('triggers create({monitor}) when the API is "downloadable" and emits progress events', async () => {
+      /** @type {((ev: any) => void)[]} */
+      const progressListeners = [];
+      const fakeMonitor = {
+        /**
+         * @param {string} type @param {(ev: any) => void} fn
+         * @param fn
+         */
+        addEventListener(type, fn) {
+          if (type === 'downloadprogress') progressListeners.push(fn);
+        },
+      };
+      let availability = 'downloadable';
+      /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+        availability: async () => availability,
+        /** @param {any} options */
+        create: async (options) => {
+          options?.monitor?.(fakeMonitor);
+          for (const loaded of [0.25, 0.5, 1]) {
+            for (const fn of progressListeners) fn({ loaded, total: 1 });
+          }
+          availability = 'available';
+          return { destroy: () => {} };
+        },
+      };
+
+      const tag = defineAISubclass();
+      const el = /** @type {AIElement} */ (mount(tag));
+      await el.aiDetectionComplete;
+
+      /** @type {number[]} */
+      const seen = [];
+      /** @type {string[]} */
+      const events = [];
+      el.addEventListener('ai-download-start', () => events.push('start'));
+      el.addEventListener('ai-download-progress', (e) =>
+        seen.push(/** @type {CustomEvent} */ (e).detail.loaded),
+      );
+      el.addEventListener('ai-download-complete', () => events.push('complete'));
+
+      const caps = await /** @type {any} */ (el).ensureAIReady();
+      expect(caps.prompt).toBe('available');
+      expect(seen).toEqual([0.25, 0.5, 1]);
+      expect(events).toEqual(['start', 'complete']);
+      expect(/** @type {any} */ (el).aiReady).toBe(true);
+      expect(/** @type {any} */ (el).aiDownloading).toBe(false);
+    });
+
+    it('throws when no requested API is downloadable and fires ai-download-error when create fails', async () => {
+      /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+        availability: async () => 'unavailable',
+      };
+      const tag = defineAISubclass();
+      const el = /** @type {AIElement} */ (mount(tag));
+      await el.aiDetectionComplete;
+      await expect(/** @type {any} */ (el).ensureAIReady()).rejects.toThrow(
+        /no Chrome AI API is downloadable/,
+      );
+    });
+
+    it('fires ai-download-error and rethrows when create() fails mid-download', async () => {
+      /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+        availability: async () => 'downloadable',
+        create: async () => {
+          throw new Error('download failed');
+        },
+      };
+      const tag = defineAISubclass();
+      const el = /** @type {AIElement} */ (mount(tag));
+      await el.aiDetectionComplete;
+
+      /** @type {any} */
+      let errPayload = null;
+      el.addEventListener('ai-download-error', (e) => {
+        errPayload = /** @type {CustomEvent} */ (e).detail;
+      });
+      await expect(/** @type {any} */ (el).ensureAIReady()).rejects.toThrow(/download failed/);
+      expect(errPayload.api).toBe('prompt');
+      expect(errPayload.error).toBeInstanceOf(Error);
+      expect(/** @type {any} */ (el).aiDownloading).toBe(false);
+    });
+
+    it('deduplicates concurrent calls (same in-flight promise)', async () => {
+      let createCalls = 0;
+      /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+        availability: async () => 'downloadable',
+        create: async () => {
+          createCalls += 1;
+          /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = {
+            availability: async () => 'available',
+          };
+          return { destroy: () => {} };
+        },
+      };
+      const tag = defineAISubclass();
+      const el = /** @type {AIElement} */ (mount(tag));
+      await el.aiDetectionComplete;
+
+      const p1 = /** @type {any} */ (el).ensureAIReady();
+      const p2 = /** @type {any} */ (el).ensureAIReady();
+      expect(p1).toBe(p2);
+      await p1;
+      expect(createCalls).toBe(1);
+    });
+  });
 });

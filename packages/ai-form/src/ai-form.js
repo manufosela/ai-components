@@ -142,6 +142,32 @@ export class AIForm extends VoiceMixin(AIElement) {
     .ai-form-errors:empty {
       display: none;
     }
+    .ai-status {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.5rem;
+      border: 1px solid var(--ai-form-status-border, rgba(0, 0, 0, 0.15));
+      border-radius: 4px;
+      background: var(--ai-form-status-bg, transparent);
+      font-size: 0.9rem;
+    }
+    .ai-status[data-state='downloadable'] {
+      border-color: var(--ai-form-status-warn, #c58a00);
+    }
+    .ai-status[data-state='downloading'] {
+      border-color: var(--ai-form-status-info, #0a7aca);
+    }
+    .ai-status[data-state='unsupported'] {
+      border-color: var(--ai-form-status-muted, rgba(0, 0, 0, 0.2));
+      color: var(--ai-form-status-muted-fg, rgba(0, 0, 0, 0.6));
+    }
+    .ai-status progress {
+      flex: 1;
+      min-width: 8rem;
+    }
   `;
 
   constructor() {
@@ -194,18 +220,19 @@ export class AIForm extends VoiceMixin(AIElement) {
 
   /** @override */
   renderAI() {
-    const promptAvailable = this.aiCapabilities?.prompt !== 'unavailable';
+    const promptReady = this.aiCapabilities?.prompt === 'available';
     const voiceActive = this.voiceInput && this.speechInAvailable;
     return html`
+      ${this._renderStatusBanner()}
       <div class="ai-toolbar" part="toolbar" role="toolbar">
         <button
           type="button"
           data-action="paste-assist"
-          ?disabled=${!promptAvailable || this._pasteBusy}
+          ?disabled=${!promptReady || this._pasteBusy}
           @click=${this._openPasteAssist}
-          title=${promptAvailable
+          title=${promptReady
             ? 'Paste free text to auto-fill the form'
-            : 'Prompt API not available'}
+            : 'Enable AI first (download the model)'}
         >
           📋 Paste & fill
         </button>
@@ -234,7 +261,77 @@ export class AIForm extends VoiceMixin(AIElement) {
 
   /** @override */
   renderFallback() {
-    return html`<slot></slot>`;
+    // aiCapabilities is null while detection is still running; null means
+    // we haven't decided yet — show only the slot in that case.
+    const decided = this.aiCapabilities !== null;
+    return html`
+      ${decided
+        ? html`<div class="ai-status" part="status" data-state="unsupported">
+            <strong>Chrome Built-in AI not available.</strong> The form still works with native
+            HTML5 validation.
+            <a
+              href="https://developer.chrome.com/docs/ai/get-started"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Requirements →</a
+            >
+          </div>`
+        : nothing}
+      <slot></slot>
+    `;
+  }
+
+  /**
+   * Render the capability banner above the toolbar. Shows:
+   * - "downloadable": CTA to run `ensureAIReady()`.
+   * - "downloading":  progress bar driven by `aiDownloadProgress`.
+   * - "available":    nothing (silent).
+   * @returns {unknown}
+   */
+  _renderStatusBanner() {
+    const state = this.aiCapabilities?.prompt ?? 'unavailable';
+    if (state === 'available') return nothing;
+    if (state === 'downloading' || this.aiDownloading) {
+      const pct = Math.round((this.aiDownloadProgress ?? 0) * 100);
+      return html`
+        <div class="ai-status" part="status" data-state="downloading" role="status">
+          <span>⏬ Downloading Gemini Nano… ${pct}%</span>
+          <progress max="1" value=${this.aiDownloadProgress}></progress>
+        </div>
+      `;
+    }
+    if (state === 'downloadable') {
+      return html`
+        <div class="ai-status" part="status" data-state="downloadable" role="status">
+          <span>🤖 Chrome AI is ready to download (~2 GB, one-time).</span>
+          <button type="button" data-action="enable-ai" @click=${this._onEnableAI}>
+            Enable AI
+          </button>
+        </div>
+      `;
+    }
+    // 'unavailable' but aiAvailable=true (some OTHER core API is usable) —
+    // rare in practice; show a compact notice so the user knows Prompt is
+    // off while the rest may still work.
+    return html`
+      <div class="ai-status" part="status" data-state="unsupported">
+        <span
+          >Prompt API not available; Paste &amp; fill and semantic validation are disabled.</span
+        >
+      </div>
+    `;
+  }
+
+  /**
+   * Click handler for the "Enable AI" button. User gesture satisfies
+   * Chrome's activation requirement for create().
+   */
+  async _onEnableAI() {
+    try {
+      await this.ensureAIReady({ apis: ['prompt'] });
+    } catch {
+      /* ai-download-error already dispatched by AIElement */
+    }
   }
 
   /**
