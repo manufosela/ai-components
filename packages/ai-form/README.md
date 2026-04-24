@@ -4,7 +4,7 @@
 
 - Paste free text to auto-fill inputs (AIC-TSK-0008, shipped).
 - Natural-language validation rules (AIC-TSK-0009, shipped).
-- Optional voice input / output (roadmap: AIC-TSK-0010).
+- Optional voice input / output (AIC-TSK-0010, shipped).
 
 If Chrome Built-in AI is **not** available, the component renders the slotted `<form>` as-is and delegates to HTML5 native validation. The underlying `<form>` always works.
 
@@ -12,7 +12,7 @@ If Chrome Built-in AI is **not** available, the component renders the slotted `<
 
 ## Status
 
-> Fill-from-text and **semantic validation** are shipped. Voice I/O (0010) is next.
+> Fill-from-text, semantic validation and **voice I/O** are shipped. Sprint 1 complete pending docs site and 0.1.0 release (AIC-TSK-0011 / 0012).
 
 ## Install
 
@@ -50,9 +50,11 @@ npm install @manufosela/ai-form @manufosela/ai-core
 
 ## Attributes
 
-| Attribute  | Description                                                                                  |
-| ---------- | -------------------------------------------------------------------------------------------- |
-| `language` | BCP-47 language tag (default `en-US`). Consumed by AI + voice features in upcoming releases. |
+| Attribute      | Description                                                                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `language`     | BCP-47 language tag (default `en-US`). Used by all AI + voice features.                                                                      |
+| `voice-input`  | When present, the toolbar 🎤 button is enabled and uses SpeechRecognition to dictate into the focused `[ai-voice]` input (or the first one). |
+| `voice-output` | When present, validation failures are read aloud via SpeechSynthesis.                                                                        |
 
 ## Fill-from-text
 
@@ -74,6 +76,23 @@ Declare natural-language rules on inputs with `ai-validate`:
 On submit, `<ai-form>` asks the Prompt API whether each value satisfies its rule (one call per non-empty field, in parallel). Failed rules are reported via the native [Constraint Validation API](https://developer.mozilla.org/docs/Web/API/Constraint_validation): `setCustomValidity(reason)` + `form.reportValidity()`. When every rule passes, the original submit is replayed (the component sets a one-shot bypass flag so it is not re-validated).
 
 If the Prompt API is unavailable, validation is skipped and native HTML5 validation runs as usual.
+
+## Voice I/O
+
+Opt in with attributes on `<ai-form>`. Mark the inputs that should receive dictated text with `ai-voice`:
+
+```html
+<ai-form language="es-ES" voice-input voice-output>
+  <form>
+    <input name="ciudad" ai-voice />
+    <textarea name="comentario" ai-voice ai-validate="tono profesional"></textarea>
+    <button type="submit">Enviar</button>
+  </form>
+</ai-form>
+```
+
+- Click the toolbar 🎤 button to start dictating into the focused `[ai-voice]` input (or the first `[ai-voice]` input when nothing is focused). Click again to stop. A browser without `SpeechRecognition` keeps the button disabled.
+- When `voice-output` is present and validation fails on submit, the collected reasons are read aloud in `language`. `SpeechSynthesis` must be available; otherwise this is a no-op.
 
 ## Events
 
