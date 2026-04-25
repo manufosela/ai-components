@@ -56,11 +56,12 @@ npm install @manufosela/ai-form @manufosela/ai-core
 
 ## Attributes
 
-| Attribute      | Description                                                                                                                                                                          |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `language`     | BCP-47 language tag (default `en-US`). Used for the dynamic chat prompt (currently `es` / `en` templates; other languages fall back to `en`) and by all voice features.              |
-| `voice-input`  | When present, a 🎤 button is rendered next to the chat textarea; pressing it dictates via SpeechRecognition into the textarea so the user can review/edit before pressing **Check**. |
-| `voice-output` | When present, validation failures are read aloud via SpeechSynthesis.                                                                                                                |
+| Attribute       | Description                                                                                                                                                                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `language`      | BCP-47 language tag (default `en-US`). Used for the dynamic chat prompt (currently `es` / `en` templates; other languages fall back to `en`) and by all voice features.                                                                              |
+| `voice-input`   | When present, a 🎤 button is rendered next to the chat textarea; pressing it dictates via SpeechRecognition into the textarea so the user can review/edit before pressing **Check**.                                                                 |
+| `voice-output`  | When present, validation failures are read aloud via SpeechSynthesis.                                                                                                                                                                                |
+| `history-turns` | Number of previous chat messages (assistant + user) sent as context to the extraction prompt (default `6`). Set to `0` to disable. Helps the AI resolve elided references like _"the letter is L"_ when the previous turn already mentioned the DNI. |
 
 ## Conversational flow
 
@@ -88,7 +89,9 @@ Mark a field with `ai-format="<validator>"` (or the equivalent `data-tovalidate=
 <input name="movil" ai-extract="móvil" ai-format="mobileEs" />
 ```
 
-After every extraction, the value is run through the matching pure predicate from [`@manufosela/form-validators`](https://www.npmjs.com/package/@manufosela/form-validators). If it fails, the value is **dropped**, the chat assistant says (in `language`) something like _"El DNI que me has dado no parece correcto, ¿me lo repites?"_ and the field stays empty so the next dynamic prompt re-asks for it. The same predicate runs as a final safety net at submit time, so a manual edit can't bypass the check.
+After every extraction, the value is run through the matching pure predicate from [`@manufosela/form-validators`](https://www.npmjs.com/package/@manufosela/form-validators). If it fails, the value is **dropped**, the chat assistant pushes a localized error bubble and the field stays empty so the next dynamic prompt re-asks for it. The same predicate runs as a final safety net at submit time, so a manual edit can't bypass the check.
+
+For NIF and NIE the assistant is **diagnostic**: when only the 8 digits are dictated, it computes and offers the correct control letter (_"Te falta la letra de control. Tu DNI sería 52117098H. ¿Me lo confirmas?"_); when the letter is wrong, it tells the user which one would match. Other validators get a generic per-name message.
 
 | Common validators                                                                | Notes                         |
 | -------------------------------------------------------------------------------- | ----------------------------- |
@@ -136,16 +139,17 @@ Opt in with attributes on `<ai-form>`. The mic dictates into the chat textarea s
 
 Inherits `ai-ready` / `ai-unavailable` / `ai-download-*` from [`AIElement`](../ai-core#events). Emits additionally:
 
-| Event                    | Detail                                             | Fired when                                                                                                            |
-| ------------------------ | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `ai-conversation-update` | `{ pendingAIFields, pendingManualFields, prompt }` | The chat state (prompt or complete flag) changed.                                                                     |
-| `ai-field-extracted`     | `{ name, value }`                                  | The AI wrote a value into a slotted input.                                                                            |
-| `ai-extraction-rejected` | `{ fields: [{name, format, value}], stage? }`      | One or more values failed their `ai-format` predicate and were dropped (or blocked submit when `stage === 'submit'`). |
-| `ai-no-match`            | `{ reason, response?, parsed? }`                   | An extraction round produced no fields (no `ai-extract`, empty JSON, …).                                              |
-| `ai-validation-start`    | `{ fields: string[] }`                             | Semantic validation started on submit.                                                                                |
-| `ai-validation-passed`   | `{ results: ValidationResult[] }`                  | Every field satisfied its rule; submit proceeds natively.                                                             |
-| `ai-validation-failed`   | `{ results: ValidationResult[] }`                  | At least one rule failed; submit blocked and `reportValidity()` called.                                               |
-| `ai-error`               | `{ error, stage }`                                 | An AI call failed (`stage` is `'conversation-extract'` or `'semantic-validation'`).                                   |
+| Event                    | Detail                                             | Fired when                                                                                                                                         |
+| ------------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ai-conversation-update` | `{ pendingAIFields, pendingManualFields, prompt }` | The chat state (prompt or complete flag) changed.                                                                                                  |
+| `ai-conversation-help`   | `{ intent, answer }`                               | The AI classified the user's message as `'help' \| 'clarify' \| 'correct'` instead of data; `answer` is shown as a bubble and no field is written. |
+| `ai-field-extracted`     | `{ name, value }`                                  | The AI wrote a value into a slotted input.                                                                                                         |
+| `ai-extraction-rejected` | `{ fields: [{name, format, value}], stage? }`      | One or more values failed their `ai-format` predicate and were dropped (or blocked submit when `stage === 'submit'`).                              |
+| `ai-no-match`            | `{ reason, response?, parsed? }`                   | An extraction round produced no fields (no `ai-extract`, empty JSON, …).                                                                           |
+| `ai-validation-start`    | `{ fields: string[] }`                             | Semantic validation started on submit.                                                                                                             |
+| `ai-validation-passed`   | `{ results: ValidationResult[] }`                  | Every field satisfied its rule; submit proceeds natively.                                                                                          |
+| `ai-validation-failed`   | `{ results: ValidationResult[] }`                  | At least one rule failed; submit blocked and `reportValidity()` called.                                                                            |
+| `ai-error`               | `{ error, stage }`                                 | An AI call failed (`stage` is `'conversation-extract'` or `'semantic-validation'`).                                                                |
 
 ## License
 
