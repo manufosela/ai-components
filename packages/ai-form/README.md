@@ -78,6 +78,27 @@ The user types or dictates an answer and clicks **Check**. The component calls t
 
 AI-candidates are **strictly opt-in** via `ai-extract`. Inputs without it — file uploads, checkboxes, `<select>`, dates, or plain text without a hint — are left for the user to fill manually and mentioned in the prompt when required.
 
+## Deterministic format validation
+
+Mark a field with `ai-format="<validator>"` (or the equivalent `data-tovalidate="<validator>"` for drop-in compat with [`automatic_form_validation`](https://www.npmjs.com/package/automatic_form_validation)) to guarantee the AI never writes a value that fails the format check.
+
+```html
+<input name="dni" ai-extract="DNI" ai-format="nif" required />
+<input name="iban" ai-extract="IBAN" ai-format="bankAccountEs" />
+<input name="movil" ai-extract="móvil" ai-format="mobileEs" />
+```
+
+After every extraction, the value is run through the matching pure predicate from [`@manufosela/form-validators`](https://www.npmjs.com/package/@manufosela/form-validators). If it fails, the value is **dropped**, the chat assistant says (in `language`) something like _"El DNI que me has dado no parece correcto, ¿me lo repites?"_ and the field stays empty so the next dynamic prompt re-asks for it. The same predicate runs as a final safety net at submit time, so a manual edit can't bypass the check.
+
+| Common validators                                                                | Notes                         |
+| -------------------------------------------------------------------------------- | ----------------------------- |
+| `email`, `url`, `mobileEs`, `landlineEs`, `telephoneEs`, `postalCodeEs`, `iccid` | Communications                |
+| `nif`, `nie`, `cif`, `bankAccountEs`                                             | Spanish documents and banking |
+| `creditCard`                                                                     | Luhn-checked                  |
+| `date`, `integer`, `float`, `number`, `alpha`, `alphanumeric`, `fileExtension`   | Primitives                    |
+
+See the [`@manufosela/form-validators` README](https://www.npmjs.com/package/@manufosela/form-validators) for the full catalogue and the alias list (`movil`, `correo`, `tarjetacredito`, `cuentabancaria`, etc.).
+
 ## Semantic validation
 
 Declare natural-language rules on inputs with `ai-validate`:
@@ -115,15 +136,16 @@ Opt in with attributes on `<ai-form>`. The mic dictates into the chat textarea s
 
 Inherits `ai-ready` / `ai-unavailable` / `ai-download-*` from [`AIElement`](../ai-core#events). Emits additionally:
 
-| Event                    | Detail                                             | Fired when                                                                          |
-| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `ai-conversation-update` | `{ pendingAIFields, pendingManualFields, prompt }` | The chat state (prompt or complete flag) changed.                                   |
-| `ai-field-extracted`     | `{ name, value }`                                  | The AI wrote a value into a slotted input.                                          |
-| `ai-no-match`            | `{ reason, response?, parsed? }`                   | An extraction round produced no fields (no `ai-extract`, empty JSON, …).            |
-| `ai-validation-start`    | `{ fields: string[] }`                             | Semantic validation started on submit.                                              |
-| `ai-validation-passed`   | `{ results: ValidationResult[] }`                  | Every field satisfied its rule; submit proceeds natively.                           |
-| `ai-validation-failed`   | `{ results: ValidationResult[] }`                  | At least one rule failed; submit blocked and `reportValidity()` called.             |
-| `ai-error`               | `{ error, stage }`                                 | An AI call failed (`stage` is `'conversation-extract'` or `'semantic-validation'`). |
+| Event                    | Detail                                             | Fired when                                                                                                            |
+| ------------------------ | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ai-conversation-update` | `{ pendingAIFields, pendingManualFields, prompt }` | The chat state (prompt or complete flag) changed.                                                                     |
+| `ai-field-extracted`     | `{ name, value }`                                  | The AI wrote a value into a slotted input.                                                                            |
+| `ai-extraction-rejected` | `{ fields: [{name, format, value}], stage? }`      | One or more values failed their `ai-format` predicate and were dropped (or blocked submit when `stage === 'submit'`). |
+| `ai-no-match`            | `{ reason, response?, parsed? }`                   | An extraction round produced no fields (no `ai-extract`, empty JSON, …).                                              |
+| `ai-validation-start`    | `{ fields: string[] }`                             | Semantic validation started on submit.                                                                                |
+| `ai-validation-passed`   | `{ results: ValidationResult[] }`                  | Every field satisfied its rule; submit proceeds natively.                                                             |
+| `ai-validation-failed`   | `{ results: ValidationResult[] }`                  | At least one rule failed; submit blocked and `reportValidity()` called.                                               |
+| `ai-error`               | `{ error, stage }`                                 | An AI call failed (`stage` is `'conversation-extract'` or `'semantic-validation'`).                                   |
 
 ## License
 

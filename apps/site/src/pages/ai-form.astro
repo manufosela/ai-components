@@ -16,9 +16,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             name="telefono"
             type="tel"
             ai-extract="número de móvil"
-            ai-validate="spanish mobile (9 digits, starting with 6 or 7)"
+            ai-format="mobileEs"
             required
           />
+        </label>
+        <label>
+          <span>DNI</span>
+          <input name="dni" ai-extract="DNI o NIF español" ai-format="nif" required />
         </label>
         <label>
           <span>Email</span>
@@ -143,6 +147,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       'ai-download-complete',
       'ai-download-error',
       'ai-field-extracted',
+      'ai-extraction-rejected',
       'ai-conversation-update',
       'ai-no-match',
       'ai-error',
