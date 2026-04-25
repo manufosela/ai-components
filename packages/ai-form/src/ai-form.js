@@ -67,6 +67,7 @@ const _warnedUnknownFormats = new Set();
  * @fires ai-unavailable           Inherited from AIElement.
  * @fires ai-field-extracted       AI wrote a value into a slotted input; `detail: {name, value}`.
  * @fires ai-extraction-rejected   One or more extracted values failed their `ai-format` deterministic validator and were dropped; `detail: {fields: [{name, format, value}]}`.
+ * @fires ai-conversation-help     The model classified the user's message as a question / clarification rather than data; `detail: {intent, answer}` where `intent` ∈ `'help' | 'clarify' | 'correct'`.
  * @fires ai-conversation-update   Conversation state changed; `detail: {pendingAIFields, pendingManualFields, prompt}`.
  * @fires ai-no-match              An extraction round produced zero fields.
  * @fires ai-error                 An AI call failed (`detail.error`, `detail.stage`).
@@ -87,6 +88,8 @@ export class AIForm extends VoiceMixin(AIElement) {
     voiceInput: { type: Boolean, reflect: true, attribute: 'voice-input' },
     /** When present, validation failures are read aloud with SpeechSynthesis. */
     voiceOutput: { type: Boolean, reflect: true, attribute: 'voice-output' },
+    /** Number of previous chat messages to include as context in the extraction prompt (default 6). */
+    historyTurns: { type: Number, reflect: true, attribute: 'history-turns' },
     _chatInput: { type: String, state: true },
     _chatBusy: { type: Boolean, state: true },
     _messages: { type: Array, state: true },
@@ -272,6 +275,8 @@ export class AIForm extends VoiceMixin(AIElement) {
     this.voiceInput = false;
     /** @type {boolean} */
     this.voiceOutput = false;
+    /** @type {number} */
+    this.historyTurns = 6;
     /** @type {string} */
     this._chatInput = '';
     /** @type {boolean} */
@@ -793,6 +798,18 @@ export class AIForm extends VoiceMixin(AIElement) {
           'Este formulario no tiene campos marcados con ai-extract, así que no puedo rellenarlo por ti.',
         error: 'Ha fallado la llamada a la IA. Vuelve a intentarlo.',
         formatErrors: {
+          'nif-missing-letter': (_n, _v, ctx) =>
+            `Te falta la letra de control. Tu DNI sería ${ctx?.suggestion ?? ''}. ¿Me lo confirmas?`,
+          'nif-wrong-letter': (_n, _v, ctx) =>
+            `La letra del DNI no coincide. Para esos dígitos sería ${ctx?.suggestion ?? ''}. ¿Es ese tu DNI?`,
+          'nif-bad-format': () =>
+            'No parece un DNI/NIF válido (deberían ser 8 dígitos + letra). ¿Me lo repites?',
+          'nie-missing-letter': (_n, _v, ctx) =>
+            `Te falta la letra de control del NIE. Sería ${ctx?.suggestion ?? ''}. ¿Me lo confirmas?`,
+          'nie-wrong-letter': (_n, _v, ctx) =>
+            `La letra del NIE no coincide. Sería ${ctx?.suggestion ?? ''}. ¿Es ese tu NIE?`,
+          'nie-bad-format': () =>
+            'No parece un NIE válido (X/Y/Z + 7 dígitos + letra, o T + 8 caracteres). ¿Me lo repites?',
           nif: () =>
             'El DNI/NIF que me has dado no parece correcto (la letra no encaja). ¿Me lo repites?',
           nie: () => 'El NIE que me has dado no parece correcto. ¿Me lo repites?',
@@ -853,6 +870,18 @@ export class AIForm extends VoiceMixin(AIElement) {
         "This form has no fields marked with ai-extract, so I can't fill it in for you.",
       error: 'The AI call failed. Please try again.',
       formatErrors: {
+        'nif-missing-letter': (_n, _v, ctx) =>
+          `The control letter is missing. Your DNI would be ${ctx?.suggestion ?? ''}. Is that right?`,
+        'nif-wrong-letter': (_n, _v, ctx) =>
+          `The DNI control letter doesn't match. For those digits it should be ${ctx?.suggestion ?? ''}. Is that your DNI?`,
+        'nif-bad-format': () =>
+          "That doesn't look like a valid DNI/NIF (should be 8 digits + letter). Can you repeat it?",
+        'nie-missing-letter': (_n, _v, ctx) =>
+          `The NIE control letter is missing. It would be ${ctx?.suggestion ?? ''}. Is that right?`,
+        'nie-wrong-letter': (_n, _v, ctx) =>
+          `The NIE control letter doesn't match. It should be ${ctx?.suggestion ?? ''}. Is that your NIE?`,
+        'nie-bad-format': () =>
+          "That doesn't look like a valid NIE (X/Y/Z + 7 digits + letter, or T + 8 chars). Can you repeat it?",
         nif: () =>
           "The DNI/NIF you gave me doesn't look right (the control letter doesn't check out). Can you repeat it?",
         nie: () => "The NIE you gave me doesn't look right. Can you repeat it?",
@@ -915,6 +944,69 @@ export class AIForm extends VoiceMixin(AIElement) {
    * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} el
    * @returns {{ name: string, fn: (value: unknown, ...rest: unknown[]) => boolean } | null}
    */
+  /**
+   * Build the user-facing message for a failed format validation. Tries
+   * the diagnostic key first (e.g. `nif-missing-letter` with computed
+   * suggestion) and falls back to the per-validator generic, then to the
+   * `_default` template.
+   * @param {ReturnType<AIForm['_templates']>} t Templates for the current language.
+   * @param {string} format Validator name (e.g. `nif`, `mobileEs`).
+   * @param {string} fieldName The slotted input's `name`.
+   * @param {string} value The value that failed.
+   * @returns {string}
+   */
+  _formatErrorMessage(t, format, fieldName, value) {
+    const diag = this._diagnoseFormatFailure(format, value);
+    if (diag && t.formatErrors[diag.key]) {
+      return t.formatErrors[diag.key](fieldName, value, diag);
+    }
+    const fn = t.formatErrors[format] || t.formatErrors._default;
+    return fn(fieldName, value, diag || undefined);
+  }
+
+  /**
+   * Diagnose why a value failed its format validator and produce a key +
+   * context object that the i18n templates can render. Returns `null` when
+   * we have nothing diagnostic to add (consumer falls back to the generic
+   * `formatErrors[name]` message).
+   * @param {string} format
+   * @param {string} value
+   * @returns {{ key: string, suggestion?: string } | null}
+   */
+  _diagnoseFormatFailure(format, value) {
+    const TABLE = 'TRWAGMYFPDXBNJZSQVHLCKE';
+    const dniLetterFor = (n) => TABLE.charAt(n % 23);
+    const v = (value ?? '').toUpperCase();
+
+    if (format === 'nif') {
+      if (/^\d{8}$/.test(v)) {
+        return { key: 'nif-missing-letter', suggestion: v + dniLetterFor(parseInt(v, 10)) };
+      }
+      if (/^\d{8}[A-Z]$/.test(v)) {
+        const correct = dniLetterFor(parseInt(v.substring(0, 8), 10));
+        return { key: 'nif-wrong-letter', suggestion: v.substring(0, 8) + correct };
+      }
+      return { key: 'nif-bad-format' };
+    }
+
+    if (format === 'nie') {
+      // XYZ form: replace prefix with digit, compute letter
+      if (/^[XYZ]\d{7}$/.test(v)) {
+        const swapped = v.replace(/^X/, '0').replace(/^Y/, '1').replace(/^Z/, '2');
+        const correct = dniLetterFor(parseInt(swapped, 10));
+        return { key: 'nie-missing-letter', suggestion: v + correct };
+      }
+      if (/^[XYZ]\d{7}[A-Z]$/.test(v)) {
+        const swapped = v.replace(/^X/, '0').replace(/^Y/, '1').replace(/^Z/, '2');
+        const correct = dniLetterFor(parseInt(swapped.substring(0, 8), 10));
+        return { key: 'nie-wrong-letter', suggestion: v.substring(0, 8) + correct };
+      }
+      return { key: 'nie-bad-format' };
+    }
+
+    return null;
+  }
+
   _resolveFormatValidator(el) {
     const raw = el.getAttribute('ai-format') || el.getAttribute('data-tovalidate');
     if (!raw) return null;
@@ -983,6 +1075,27 @@ export class AIForm extends VoiceMixin(AIElement) {
           ...this._messages,
           { role: 'assistant', text: this._templates().noMatch },
         ];
+        suppressAfterUserTurnPush = true;
+        return;
+      }
+
+      // Intent branch: when the model classifies the user's message as
+      // help/clarify/correct (rather than data), it returns __intent +
+      // __answer. We surface the answer as a chat bubble and skip the
+      // extraction loop entirely so we don't write garbage from a
+      // question.
+      const intent = typeof parsed.__intent === 'string' ? parsed.__intent.toLowerCase() : null;
+      const intentAnswer = typeof parsed.__answer === 'string' ? parsed.__answer : '';
+      if (intent && intent !== 'extract' && intentAnswer) {
+        this.dispatchEvent(
+          new CustomEvent('ai-conversation-help', {
+            bubbles: true,
+            composed: true,
+            detail: { intent, answer: intentAnswer },
+          }),
+        );
+        this._messages = [...this._messages, { role: 'assistant', text: intentAnswer }];
+        suppressAfterUserTurnPush = true;
         return;
       }
 
@@ -1025,9 +1138,7 @@ export class AIForm extends VoiceMixin(AIElement) {
           }),
         );
         const t = this._templates();
-        const lines = rejected.map((r) =>
-          (t.formatErrors[r.format] || t.formatErrors._default)(r.name, r.value),
-        );
+        const lines = rejected.map((r) => this._formatErrorMessage(t, r.format, r.name, r.value));
         this._messages = [...this._messages, { role: 'assistant', text: lines.join(' ') }];
         suppressAfterUserTurnPush = true;
       } else if (extracted.length === 0) {
@@ -1111,28 +1222,55 @@ export class AIForm extends VoiceMixin(AIElement) {
         return `- ${f.name} (${f.description})${constraintStr}`;
       })
       .join('\n');
+    const history = this._buildHistorySection();
     return [
-      'You extract structured data from a free-text user message that fills a form.',
-      'The text may contain hesitations, pauses, dictation artifacts and misheard segments.',
+      'You assist a user filling out a form via a chat. The user message may be:',
+      '  (a) data to extract into form fields',
+      '  (b) a question, doubt or meta-comment ("I don\'t remember", "can you calculate it?", "what should I put in X?")',
+      '  (c) a correction of something previously said',
       '',
-      'For each field, return its extracted, NORMALIZED, VALIDATED value as a string:',
+      'Choose ONE intent and return ONLY a minified JSON object accordingly:',
+      '  - intent "extract": include each extracted field as a string-valued key. Do NOT include __intent.',
+      '  - intent "help" / "clarify" / "correct": include `__intent: "<one-of-those>"` and `__answer: "<short reply in the user language>"`. Do NOT include any field keys.',
+      '',
+      'For extraction:',
       '- Normalize values (no extra spaces, fix obvious dictation errors using context, conventional form).',
-      '- Constraints in [brackets] MUST be satisfied. If you cannot extract a value that satisfies them,',
-      '  OMIT that field rather than emitting invalid data. Empty is better than wrong.',
-      '- Use OTHER fields as context to disambiguate (e.g. a known full name can fix a misheard email).',
+      '- Constraints in [brackets] MUST be satisfied. If you cannot satisfy them, OMIT that field. Empty is better than wrong.',
+      '- Use OTHER fields and the recent conversation as context (e.g. a known full name can fix a misheard email).',
       '',
-      'Return ONLY a minified JSON object with the listed field names as keys.',
-      'Do not wrap the JSON in markdown fences. Do not add commentary.',
+      'For help/clarify/correct:',
+      '- Be concise (max 2 sentences). Answer the question or acknowledge the correction.',
+      '- For computational questions you can answer (e.g. compute a NIF control letter), do it.',
+      '',
+      'Do not wrap the JSON in markdown fences. Do not add commentary outside the JSON.',
       `Language hint: ${this.language}.`,
       '',
       'Fields:',
       list,
+      ...(history ? ['', 'Recent conversation:', history] : []),
       '',
-      'Text:',
+      'User message:',
       '"""',
       text,
       '"""',
     ].join('\n');
+  }
+
+  /**
+   * Build the "Recent conversation" section: the last `historyTurns`
+   * messages from `_messages`, formatted as `assistant: ...` /
+   * `user: ...`. Returns an empty string when there's no history yet (the
+   * very first user turn) or when `historyTurns` is 0.
+   * @returns {string}
+   */
+  _buildHistorySection() {
+    const turns = Math.max(0, Number(this.historyTurns) || 0);
+    if (turns === 0) return '';
+    // The current user message has already been pushed to _messages by
+    // _runExtractionFromChat; exclude it from history.
+    const log = this._messages.slice(0, -1).slice(-turns);
+    if (log.length === 0) return '';
+    return log.map((m) => `${m.role}: ${m.text}`).join('\n');
   }
 
   /**
@@ -1262,7 +1400,7 @@ export class AIForm extends VoiceMixin(AIElement) {
         if (typeof c.setCustomValidity === 'function') c.setCustomValidity('');
       } else {
         const t = this._templates();
-        const msg = (t.formatErrors[validator.name] || t.formatErrors._default)(c.name, value);
+        const msg = this._formatErrorMessage(t, validator.name, c.name, value);
         if (typeof c.setCustomValidity === 'function') c.setCustomValidity(msg);
         failures.push({ name: c.name, format: validator.name, value });
       }

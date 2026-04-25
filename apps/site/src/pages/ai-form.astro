@@ -64,6 +64,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         enabled. If the banner shows "Enable AI", click it to trigger the one-time Gemini Nano
         download (~2 GB).
       </p>
+      <p>
+        <strong>Try:</strong> dictate <em>"mi DNI es 52117098 sin letra"</em> — the chat will
+        compute the missing control letter and offer it back. Or ask conversationally:
+        <em>"¿me puedes calcular la letra del DNI?"</em> and the assistant will reply without
+        touching the form.
+      </p>
     </details>
 
     <details class="event-log">
@@ -148,6 +154,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       'ai-download-error',
       'ai-field-extracted',
       'ai-extraction-rejected',
+      'ai-conversation-help',
       'ai-conversation-update',
       'ai-no-match',
       'ai-error',
