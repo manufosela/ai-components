@@ -69,8 +69,8 @@ importers:
         specifier: workspace:*
         version: link:../ai-voice
       '@manufosela/form-validators':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^1.0.0
+        version: 1.0.0
       lit:
         specifier: ^3.2.0
         version: 3.3.2
@@ -799,8 +799,8 @@ packages:
   '@lit/reactive-element@2.1.2':
     resolution: {integrity: sha512-pbCDiVMnne1lYUIaYNN5wrwQXDtHaYtg7YEFPeW+hws6U47WeFvISGUWekPGKWOP1ygrs0ef0o1VJMk1exos5A==}
 
-  '@manufosela/form-validators@0.1.0':
-    resolution: {integrity: sha512-H1k/4hRgOVSwoL9DlQ7JXUu3uvjbJc8AewOdIFrpwFbv3w+UhwIf+wgLYnrj6vnNIXdvbgEA0ZEogPyrmlJYJA==}
+  '@manufosela/form-validators@1.0.0':
+    resolution: {integrity: sha512-C6qg6eIgMMcpZrOPik+RbE1AO4eMGHyXHOjw4ueI6ZrZlPPCIYzDtA37ZOD8KvXZORBl2IZKLelXA4kZFbvrlw==}
     engines: {node: '>=20'}
 
   '@manypkg/find-root@1.1.0':
@@ -3655,7 +3655,7 @@ snapshots:
     dependencies:
       '@lit-labs/ssr-dom-shim': 1.5.1
 
-  '@manufosela/form-validators@0.1.0': {}
+  '@manufosela/form-validators@1.0.0': {}
 
   '@manypkg/find-root@1.1.0':
     dependencies:

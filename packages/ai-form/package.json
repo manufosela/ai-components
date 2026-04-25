@@ -30,7 +30,7 @@
   "dependencies": {
     "@manufosela/ai-core": "workspace:*",
     "@manufosela/ai-voice": "workspace:*",
-    "@manufosela/form-validators": "^0.1.0",
+    "@manufosela/form-validators": "^1.0.0",
     "lit": "^3.2.0"
   },
   "devDependencies": {

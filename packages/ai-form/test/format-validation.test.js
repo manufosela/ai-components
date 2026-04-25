@@ -76,7 +76,10 @@ describe('<ai-form> ai-format deterministic validation', () => {
       await send(el, 'mi DNI es 12345678 letra A');
       const evt = await rejectedP;
 
-      expect(evt.detail.fields).toEqual([{ name: 'dni', format: 'nif', value: '12345678A' }]);
+      // Pre-pass matches the 8 digits and runs the diagnostic — value
+      // is the digit-only form, suggestion (computed letter) goes into
+      // the assistant bubble below.
+      expect(evt.detail.fields).toEqual([{ name: 'dni', format: 'nif', value: '12345678' }]);
       // The value MUST NOT be written into the input.
       expect(el.querySelector('[name="dni"]').value).toBe('');
 
