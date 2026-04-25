@@ -1,6 +1,14 @@
 import { html, css, nothing } from 'lit';
 import { AIElement, prompt as promptApi } from '@manufosela/ai-core';
 import { VoiceMixin } from '@manufosela/ai-voice';
+import { validate as resolveValidator } from '@manufosela/form-validators';
+
+/**
+ * Names we have warned about as unknown — keeps console.warn from spamming
+ * on every extraction round.
+ * @type {Set<string>}
+ */
+const _warnedUnknownFormats = new Set();
 
 /**
  * Extracted field ready to be written back onto a slotted form input.
@@ -58,6 +66,7 @@ import { VoiceMixin } from '@manufosela/ai-voice';
  * @fires ai-ready                 Inherited from AIElement.
  * @fires ai-unavailable           Inherited from AIElement.
  * @fires ai-field-extracted       AI wrote a value into a slotted input; `detail: {name, value}`.
+ * @fires ai-extraction-rejected   One or more extracted values failed their `ai-format` deterministic validator and were dropped; `detail: {fields: [{name, format, value}]}`.
  * @fires ai-conversation-update   Conversation state changed; `detail: {pendingAIFields, pendingManualFields, prompt}`.
  * @fires ai-no-match              An extraction round produced zero fields.
  * @fires ai-error                 An AI call failed (`detail.error`, `detail.stage`).
@@ -646,10 +655,11 @@ export class AIForm extends VoiceMixin(AIElement) {
    * current values of slotted form fields and their classification. Appends
    * (or replaces) an assistant message when the pending set changes so the
    * conversation stays in sync. Emits `ai-conversation-update` on changes.
-   * @param {{afterUserTurn?: boolean}} [options]
+   * @param {{afterUserTurn?: boolean, skipAssistantPush?: boolean}} [options]
    */
   _updateChatState(options) {
     const afterUserTurn = options?.afterUserTurn === true;
+    const skipAssistantPush = options?.skipAssistantPush === true;
     const { aiCandidates, manualFields, form } = this._classifyFields();
 
     const pendingAIRequired = aiCandidates.filter(
@@ -676,7 +686,11 @@ export class AIForm extends VoiceMixin(AIElement) {
     // Seed the first assistant message on the very first pass once AI is
     // available, and on every user-turn response. Dedup guard: if the
     // last assistant bubble already carries the same text, say nothing.
-    if (this.aiAvailable && (!this._primed || afterUserTurn || promptChanged)) {
+    if (
+      this.aiAvailable &&
+      !skipAssistantPush &&
+      (!this._primed || afterUserTurn || promptChanged)
+    ) {
       const lastMsg = this._messages[this._messages.length - 1];
       const duplicate = lastMsg && lastMsg.role === 'assistant' && lastMsg.text === prompt;
       if (!this._primed) {
@@ -778,6 +792,47 @@ export class AIForm extends VoiceMixin(AIElement) {
         noExtractableInputs:
           'Este formulario no tiene campos marcados con ai-extract, así que no puedo rellenarlo por ti.',
         error: 'Ha fallado la llamada a la IA. Vuelve a intentarlo.',
+        formatErrors: {
+          nif: () =>
+            'El DNI/NIF que me has dado no parece correcto (la letra no encaja). ¿Me lo repites?',
+          nie: () => 'El NIE que me has dado no parece correcto. ¿Me lo repites?',
+          cif: () => 'El CIF que me has dado no parece correcto. ¿Me lo repites?',
+          email: () =>
+            'El correo electrónico que me has dado no es válido. ¿Me lo repites despacito, letra a letra?',
+          mobileEs: () =>
+            'El móvil que me has dado no parece un número español válido (deberían ser 9 dígitos empezando por 6 o 7). ¿Me lo repites?',
+          movil: () =>
+            'El móvil que me has dado no parece un número español válido (9 dígitos empezando por 6 o 7). ¿Me lo repites?',
+          mobile: () =>
+            'El móvil que me has dado no parece un número español válido. ¿Me lo repites?',
+          telephoneEs: () => 'El teléfono que me has dado no parece válido. ¿Me lo repites?',
+          telephone: () => 'El teléfono que me has dado no parece válido. ¿Me lo repites?',
+          tel: () => 'El teléfono que me has dado no parece válido. ¿Me lo repites?',
+          landlineEs: () => 'El número fijo que me has dado no parece válido. ¿Me lo repites?',
+          postalCodeEs: () =>
+            'El código postal que me has dado no parece válido (deben ser 5 dígitos). ¿Me lo repites?',
+          cp: () =>
+            'El código postal que me has dado no parece válido (5 dígitos). ¿Me lo repites?',
+          url: () =>
+            'La URL que me has dado no parece válida. ¿Puedes repetirla incluyendo https://?',
+          date: () =>
+            'La fecha que me has dado no parece válida. ¿Me la repites en formato dd/mm/aaaa?',
+          fecha: () =>
+            'La fecha que me has dado no parece válida. ¿Me la repites en formato dd/mm/aaaa?',
+          iccid: () => 'El ICCID que me has dado no parece válido. ¿Me lo repites?',
+          creditCard: () => 'El número de tarjeta no es válido. ¿Me lo repites?',
+          creditcard: () => 'El número de tarjeta no es válido. ¿Me lo repites?',
+          tarjetacredito: () => 'El número de tarjeta no es válido. ¿Me lo repites?',
+          bankAccountEs: () => 'El número de cuenta no parece válido. ¿Me lo repites?',
+          cuentabancaria: () => 'El número de cuenta no parece válido. ¿Me lo repites?',
+          accountnumber: () => 'El número de cuenta no parece válido. ¿Me lo repites?',
+          integer: () => 'El valor que me has dado no parece un número entero. ¿Me lo repites?',
+          int: () => 'El valor que me has dado no parece un número entero. ¿Me lo repites?',
+          float: () => 'El valor que me has dado no parece un número. ¿Me lo repites?',
+          number: () => 'El valor que me has dado no parece un número. ¿Me lo repites?',
+          alpha: () => 'El valor solo debería contener letras. ¿Me lo repites?',
+          _default: (name) => `El valor de ${name} no es válido. ¿Me lo repites?`,
+        },
       };
     }
     return {
@@ -797,6 +852,40 @@ export class AIForm extends VoiceMixin(AIElement) {
       noExtractableInputs:
         "This form has no fields marked with ai-extract, so I can't fill it in for you.",
       error: 'The AI call failed. Please try again.',
+      formatErrors: {
+        nif: () =>
+          "The DNI/NIF you gave me doesn't look right (the control letter doesn't check out). Can you repeat it?",
+        nie: () => "The NIE you gave me doesn't look right. Can you repeat it?",
+        cif: () => "The CIF you gave me doesn't look right. Can you repeat it?",
+        email: () =>
+          "That email address isn't valid. Can you spell it out for me, letter by letter?",
+        mobileEs: () =>
+          "That mobile number isn't a valid Spanish mobile (should be 9 digits starting with 6 or 7). Can you repeat it?",
+        movil: () => "That mobile number isn't a valid Spanish mobile. Can you repeat it?",
+        mobile: () => "That mobile number isn't a valid Spanish mobile. Can you repeat it?",
+        telephoneEs: () => "That phone number isn't valid. Can you repeat it?",
+        telephone: () => "That phone number isn't valid. Can you repeat it?",
+        tel: () => "That phone number isn't valid. Can you repeat it?",
+        landlineEs: () => "That landline number isn't valid. Can you repeat it?",
+        postalCodeEs: () => "That postal code isn't valid (should be 5 digits). Can you repeat it?",
+        cp: () => "That postal code isn't valid (5 digits). Can you repeat it?",
+        url: () => "That URL doesn't look valid. Can you repeat it including https://?",
+        date: () => "That date isn't valid. Can you repeat it as dd/mm/yyyy?",
+        fecha: () => "That date isn't valid. Can you repeat it as dd/mm/yyyy?",
+        iccid: () => "That ICCID isn't valid. Can you repeat it?",
+        creditCard: () => "That card number isn't valid. Can you repeat it?",
+        creditcard: () => "That card number isn't valid. Can you repeat it?",
+        tarjetacredito: () => "That card number isn't valid. Can you repeat it?",
+        bankAccountEs: () => "That account number isn't valid. Can you repeat it?",
+        cuentabancaria: () => "That account number isn't valid. Can you repeat it?",
+        accountnumber: () => "That account number isn't valid. Can you repeat it?",
+        integer: () => "That doesn't look like an integer. Can you repeat it?",
+        int: () => "That doesn't look like an integer. Can you repeat it?",
+        float: () => "That doesn't look like a number. Can you repeat it?",
+        number: () => "That doesn't look like a number. Can you repeat it?",
+        alpha: () => 'The value should only contain letters. Can you repeat it?',
+        _default: (name) => `The value for ${name} isn't valid. Can you repeat it?`,
+      },
     };
   }
 
@@ -817,6 +906,33 @@ export class AIForm extends VoiceMixin(AIElement) {
   }
 
   /**
+   * Resolve the deterministic format validator for a slotted input. Reads
+   * `ai-format` first, falls back to `data-tovalidate` (drop-in compat with
+   * `automatic_form_validation`). Returns `{name, fn}` or `null` if the
+   * input has no `ai-format`/`data-tovalidate` attribute or the validator
+   * name is unknown to `@manufosela/form-validators`. Unknown names emit
+   * a single console.warn per name (per session).
+   * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} el
+   * @returns {{ name: string, fn: (value: unknown, ...rest: unknown[]) => boolean } | null}
+   */
+  _resolveFormatValidator(el) {
+    const raw = el.getAttribute('ai-format') || el.getAttribute('data-tovalidate');
+    if (!raw) return null;
+    const fn = resolveValidator(raw);
+    if (!fn) {
+      if (!_warnedUnknownFormats.has(raw)) {
+        _warnedUnknownFormats.add(raw);
+        console.warn(
+          `[ai-form] unknown ai-format / data-tovalidate value: "${raw}". ` +
+            'See @manufosela/form-validators for the list of supported names.',
+        );
+      }
+      return null;
+    }
+    return { name: raw, fn };
+  }
+
+  /**
    * Send handler. Pushes the user's message into the chat, runs extraction
    * against the Prompt API and writes extracted values back into the
    * slotted inputs, then asks the state machine to append the assistant's
@@ -828,6 +944,12 @@ export class AIForm extends VoiceMixin(AIElement) {
     // Push the user's message immediately so the chat feels responsive.
     this._messages = [...this._messages, { role: 'user', text }];
     this._chatInput = '';
+    /**
+     * If we push a contextual assistant message ourselves (rejection,
+     * no-match, error), suppress the generic afterUserTurn refresh so the
+     * user doesn't see two near-identical bubbles.
+     */
+    let suppressAfterUserTurnPush = false;
 
     const { aiCandidates } = this._classifyFields();
     if (aiCandidates.length === 0) {
@@ -866,10 +988,18 @@ export class AIForm extends VoiceMixin(AIElement) {
 
       /** @type {ExtractedField[]} */
       const extracted = [];
+      /** @type {Array<{ name: string, format: string, value: string }>} */
+      const rejected = [];
       for (const field of aiCandidates) {
         const value = parsed[field.name];
         if (value == null || value === '') continue;
         const str = String(value);
+        // Deterministic format check before writing the value.
+        const validator = this._resolveFormatValidator(field.element);
+        if (validator && !validator.fn(str)) {
+          rejected.push({ name: field.name, format: validator.name, value: str });
+          continue;
+        }
         if (typeof field.element.setCustomValidity === 'function') {
           field.element.setCustomValidity('');
         }
@@ -886,7 +1016,21 @@ export class AIForm extends VoiceMixin(AIElement) {
         extracted.push({ name: field.name, value: str });
       }
 
-      if (extracted.length === 0) {
+      if (rejected.length > 0) {
+        this.dispatchEvent(
+          new CustomEvent('ai-extraction-rejected', {
+            bubbles: true,
+            composed: true,
+            detail: { fields: rejected },
+          }),
+        );
+        const t = this._templates();
+        const lines = rejected.map((r) =>
+          (t.formatErrors[r.format] || t.formatErrors._default)(r.name, r.value),
+        );
+        this._messages = [...this._messages, { role: 'assistant', text: lines.join(' ') }];
+        suppressAfterUserTurnPush = true;
+      } else if (extracted.length === 0) {
         this.dispatchEvent(
           new CustomEvent('ai-no-match', {
             bubbles: true,
@@ -898,6 +1042,7 @@ export class AIForm extends VoiceMixin(AIElement) {
           ...this._messages,
           { role: 'assistant', text: this._templates().noMatch },
         ];
+        suppressAfterUserTurnPush = true;
       }
     } catch (error) {
       this.dispatchEvent(
@@ -908,12 +1053,18 @@ export class AIForm extends VoiceMixin(AIElement) {
         }),
       );
       this._messages = [...this._messages, { role: 'assistant', text: this._templates().error }];
+      suppressAfterUserTurnPush = true;
     } finally {
       this._chatBusy = false;
       this._suppressChatStateUpdates = false;
       // Let the state machine push the follow-up assistant message based
-      // on what's still pending (single source of truth for the prompt).
-      this._updateChatState({ afterUserTurn: true });
+      // on what's still pending (single source of truth for the prompt),
+      // unless we already pushed a contextual message (rejection / no-match
+      // / error) — in that case the contextual message IS the response.
+      this._updateChatState({
+        afterUserTurn: true,
+        skipAssistantPush: suppressAfterUserTurnPush,
+      });
       // Scroll the message log after the next paint.
       this._scrollLogToBottom();
     }
@@ -1052,9 +1203,14 @@ export class AIForm extends VoiceMixin(AIElement) {
   }
 
   /**
-   * Intercepts every submit that bubbles out of the slotted form. Acts as a
-   * no-op when there are no `ai-validate` fields or the Prompt API is not
-   * available (so native HTML5 validation keeps working).
+   * Intercepts every submit that bubbles out of the slotted form. Two
+   * gates run in order:
+   * 1. Deterministic format validation (`ai-format` / `data-tovalidate`)
+   *    via `@manufosela/form-validators`. If any field fails, we set
+   *    customValidity, call reportValidity and abort.
+   * 2. Semantic AI validation (`ai-validate`) via the Prompt API.
+   *
+   * Either gate can be empty and the other still runs.
    * @param {Event} event
    */
   _handleSubmit(event) {
@@ -1063,6 +1219,10 @@ export class AIForm extends VoiceMixin(AIElement) {
       return;
     }
     if (!(event.target instanceof HTMLFormElement)) return;
+
+    // Gate 1: deterministic format validators run regardless of AI availability.
+    if (!this._runFormatGate(event)) return;
+
     if (!this.aiAvailable || this.aiCapabilities?.prompt === 'unavailable') {
       return;
     }
@@ -1071,6 +1231,53 @@ export class AIForm extends VoiceMixin(AIElement) {
 
     event.preventDefault();
     this._runValidation(event.target, fields);
+  }
+
+  /**
+   * Run deterministic `ai-format` validators across the slotted form.
+   * Returns `true` when every field with a recognised format passes (or
+   * has no value) so the submit may continue, `false` when at least one
+   * fails — in which case we set customValidity + reportValidity and
+   * cancel the submit.
+   * @param {Event} event
+   * @returns {boolean}
+   */
+  _runFormatGate(event) {
+    const form = /** @type {HTMLFormElement} */ (event.target);
+    /** @type {Array<{ name: string, format: string, value: string }>} */
+    const failures = [];
+    for (const c of form.querySelectorAll('[name]')) {
+      if (
+        !(c instanceof HTMLInputElement) &&
+        !(c instanceof HTMLTextAreaElement) &&
+        !(c instanceof HTMLSelectElement)
+      ) {
+        continue;
+      }
+      const validator = this._resolveFormatValidator(c);
+      if (!validator) continue;
+      const value = typeof c.value === 'string' ? c.value : '';
+      if (value === '') continue; // presence is the `required` attribute's job
+      if (validator.fn(value)) {
+        if (typeof c.setCustomValidity === 'function') c.setCustomValidity('');
+      } else {
+        const t = this._templates();
+        const msg = (t.formatErrors[validator.name] || t.formatErrors._default)(c.name, value);
+        if (typeof c.setCustomValidity === 'function') c.setCustomValidity(msg);
+        failures.push({ name: c.name, format: validator.name, value });
+      }
+    }
+    if (failures.length === 0) return true;
+    event.preventDefault();
+    form.reportValidity();
+    this.dispatchEvent(
+      new CustomEvent('ai-extraction-rejected', {
+        bubbles: true,
+        composed: true,
+        detail: { fields: failures, stage: 'submit' },
+      }),
+    );
+    return false;
   }
 
   /**
