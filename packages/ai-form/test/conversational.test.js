@@ -293,6 +293,56 @@ describe('<ai-form> conversational mode', () => {
     });
   });
 
+  describe('extraction prompt constraints', () => {
+    it('includes per-field constraints from input type, ai-validate and pattern', async () => {
+      /** @type {string[]} */
+      const promptsSeen = [];
+      const { teardown } = setupChromeAIMock({
+        prompt: {
+          availability: 'available',
+          response: (input) => {
+            promptsSeen.push(input);
+            return JSON.stringify({});
+          },
+        },
+      });
+      cleanups.push(teardown);
+
+      const el = mount(
+        '',
+        `<form>
+          <input name="email" type="email" ai-extract="dirección de email" required />
+          <input name="tel" type="tel" ai-extract="móvil"
+            ai-validate="spanish mobile (9 digits, starting with 6 or 7)" required />
+          <input name="age" type="number" ai-extract="edad" />
+          <input name="site" type="url" ai-extract="sitio web" />
+          <input name="zip" ai-extract="código postal" pattern="\\d{5}" />
+        </form>`,
+      );
+      await ready(el);
+
+      await sendChatMessage(el, 'cualquier texto');
+      // Wait briefly for the mocked promptApi to be called.
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(promptsSeen.length).toBe(1);
+      const built = promptsSeen[0];
+      // Email constraints.
+      expect(built).toMatch(/must be a valid email in format name@domain\.tld/);
+      // Tel constraints.
+      expect(built).toMatch(/must be a valid phone number/);
+      // ai-validate is appended.
+      expect(built).toMatch(/must satisfy: spanish mobile \(9 digits/);
+      // Number / URL.
+      expect(built).toMatch(/must be a numeric value/);
+      expect(built).toMatch(/must be a valid URL with scheme/);
+      // Pattern attribute.
+      expect(built).toMatch(/must match the regex \/\\d\{5\}\//);
+      // Anti-hallucination directive.
+      expect(built).toMatch(/Empty is better than wrong/i);
+    });
+  });
+
   describe('chat UI gating by availability state', () => {
     it('disables textarea and Send while state is downloadable', async () => {
       const { teardown } = setupChromeAIMock({ prompt: { availability: 'downloadable' } });

@@ -941,17 +941,37 @@ export class AIForm extends VoiceMixin(AIElement) {
   }
 
   /**
-   * Build the extraction prompt sent to the Chrome Prompt API.
+   * Build the extraction prompt sent to the Chrome Prompt API. Each field
+   * is annotated with its description (`ai-extract`), input type
+   * (email/tel/url/number/text), an `ai-validate` rule when present, and a
+   * `pattern` regex if any. The model is instructed to normalize values
+   * (fix dictation artifacts using surrounding context) and to OMIT any
+   * field whose extracted value would not satisfy its constraints — so an
+   * unintelligible reply produces an empty field instead of garbage.
    * @param {string} text
    * @param {ExtractableField[]} fields
    * @returns {string}
    */
   _buildExtractionPrompt(text, fields) {
-    const list = fields.map((f) => `- ${f.name}: ${f.description}`).join('\n');
+    const list = fields
+      .map((f) => {
+        const constraints = this._fieldConstraints(f.element);
+        const constraintStr = constraints.length ? ` [${constraints.join('; ')}]` : '';
+        return `- ${f.name} (${f.description})${constraintStr}`;
+      })
+      .join('\n');
     return [
-      'You extract structured data from free text.',
-      'Return ONLY a minified JSON object with the listed field names as keys and the extracted string values.',
-      'Omit fields that are not present in the text. Do not wrap the JSON in markdown fences. Do not add commentary.',
+      'You extract structured data from a free-text user message that fills a form.',
+      'The text may contain hesitations, pauses, dictation artifacts and misheard segments.',
+      '',
+      'For each field, return its extracted, NORMALIZED, VALIDATED value as a string:',
+      '- Normalize values (no extra spaces, fix obvious dictation errors using context, conventional form).',
+      '- Constraints in [brackets] MUST be satisfied. If you cannot extract a value that satisfies them,',
+      '  OMIT that field rather than emitting invalid data. Empty is better than wrong.',
+      '- Use OTHER fields as context to disambiguate (e.g. a known full name can fix a misheard email).',
+      '',
+      'Return ONLY a minified JSON object with the listed field names as keys.',
+      'Do not wrap the JSON in markdown fences. Do not add commentary.',
       `Language hint: ${this.language}.`,
       '',
       'Fields:',
@@ -962,6 +982,40 @@ export class AIForm extends VoiceMixin(AIElement) {
       text,
       '"""',
     ].join('\n');
+  }
+
+  /**
+   * Compose the natural-language constraints to send to the model for a
+   * given input. Combines the input's `type` (email/tel/url/number),
+   * `ai-validate` rule, and `pattern` regex if any.
+   * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} el
+   * @returns {string[]}
+   */
+  _fieldConstraints(el) {
+    /** @type {string[]} */
+    const parts = [];
+    const type = el instanceof HTMLInputElement ? (el.type || '').toLowerCase() : '';
+    if (type === 'email') {
+      parts.push('must be a valid email in format name@domain.tld');
+      parts.push('strip spaces, lowercase, fix obvious dictation errors using context');
+      parts.push("if the text doesn't contain something interpretable as an email, OMIT");
+    } else if (type === 'tel') {
+      parts.push('must be a valid phone number');
+      parts.push('keep digits with optional spaces, dashes or a leading +');
+      parts.push('if not a phone number, OMIT');
+    } else if (type === 'url') {
+      parts.push('must be a valid URL with scheme');
+      parts.push('add https:// if missing, lowercase the domain');
+      parts.push('if not a URL, OMIT');
+    } else if (type === 'number') {
+      parts.push('must be a numeric value');
+      parts.push('if not numeric, OMIT');
+    }
+    const validate = el.getAttribute('ai-validate');
+    if (validate) parts.push(`must satisfy: ${validate}`);
+    const pattern = el instanceof HTMLInputElement ? el.getAttribute('pattern') : null;
+    if (pattern) parts.push(`must match the regex /${pattern}/`);
+    return parts;
   }
 
   /**
