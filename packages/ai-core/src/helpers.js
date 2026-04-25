@@ -34,17 +34,22 @@ async function withSession(create, fn) {
 
 /**
  * Lookup a global AI API and return its `create` factory, or throw a
- * standardized error if the API is not usable.
+ * standardized error if the API is not usable. Accepts both plain-object
+ * namespaces and class/constructor shapes — Chrome exposes `LanguageModel`,
+ * `Writer`, `Summarizer` and `Translator` as classes (`typeof === 'function'`).
  * @param {string} apiName
  * @returns {{ create: (opts?: unknown) => Promise<unknown> }}
  */
 function requireApi(apiName) {
   const api = /** @type {Record<string, unknown>} */ (globalThis)[apiName];
-  if (
-    !api ||
-    typeof api !== 'object' ||
-    typeof (/** @type {{create?: unknown}} */ (api).create) !== 'function'
-  ) {
+  if (api === null || api === undefined) {
+    throw new Error(`@manufosela/ai-core: Chrome ${apiName} API not available`);
+  }
+  const t = typeof api;
+  if (t !== 'object' && t !== 'function') {
+    throw new Error(`@manufosela/ai-core: Chrome ${apiName} API not available`);
+  }
+  if (typeof (/** @type {{create?: unknown}} */ (api).create) !== 'function') {
     throw new Error(`@manufosela/ai-core: Chrome ${apiName} API not available`);
   }
   return /** @type {{ create: (opts?: unknown) => Promise<unknown> }} */ (api);

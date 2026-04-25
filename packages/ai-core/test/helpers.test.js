@@ -50,6 +50,24 @@ describe('ai-core helpers', () => {
       await expect(prompt('hi')).rejects.toThrow(/Chrome LanguageModel API not available/);
     });
 
+    it('accepts class/constructor-shaped LanguageModel (typeof === "function") — regression for AIC-BUG-0002', async () => {
+      // Chrome exposes LanguageModel as a CLASS, not a plain object; `requireApi`
+      // used to bail with `typeof !== 'object'` and every call failed with
+      // "Chrome LanguageModel API not available" even when the API was usable.
+      const promptSpy = vi.fn(async () => 'mocked');
+      const destroySpy = vi.fn();
+      class FakeLanguageModel {
+        static async create() {
+          return { prompt: promptSpy, destroy: destroySpy };
+        }
+      }
+      /** @type {Record<string, unknown>} */ (globalThis).LanguageModel = FakeLanguageModel;
+
+      await expect(prompt('hi')).resolves.toBe('mocked');
+      expect(promptSpy).toHaveBeenCalledWith('hi');
+      expect(destroySpy).toHaveBeenCalledOnce();
+    });
+
     it('creates a session with the given options, calls prompt(input) and destroys the session', async () => {
       const { createSpy, methodSpy, destroySpy } = installFakeApi(
         'LanguageModel',
