@@ -1,7 +1,10 @@
 import { html, css, nothing } from 'lit';
 import { AIElement, prompt as promptApi } from '@manufosela/ai-core';
 import { VoiceMixin } from '@manufosela/ai-voice';
-import { validate as resolveValidator } from '@manufosela/form-validators';
+import {
+  validate as resolveValidator,
+  normalize as resolveNormalizer,
+} from '@manufosela/form-validators';
 
 /**
  * Names we have warned about as unknown — keeps console.warn from spamming
@@ -90,6 +93,8 @@ export class AIForm extends VoiceMixin(AIElement) {
     voiceOutput: { type: Boolean, reflect: true, attribute: 'voice-output' },
     /** Number of previous chat messages to include as context in the extraction prompt (default 6). */
     historyTurns: { type: Number, reflect: true, attribute: 'history-turns' },
+    /** Map of help-handler functions keyed by intent question topic. Consumer can extend / override. */
+    helpHandlers: { type: Object, attribute: false },
     _chatInput: { type: String, state: true },
     _chatBusy: { type: Boolean, state: true },
     _messages: { type: Array, state: true },
@@ -277,6 +282,10 @@ export class AIForm extends VoiceMixin(AIElement) {
     this.voiceOutput = false;
     /** @type {number} */
     this.historyTurns = 6;
+    /** @type {Record<string, (ctx: { question: string, pendingAIFields: string[], pendingManualFields: string[], formData: Record<string, string> }) => string>} */
+    this.helpHandlers = {};
+    /** @type {{ field: string, value: string, format: string } | null} */
+    this._pendingConfirmation = null;
     /** @type {string} */
     this._chatInput = '';
     /** @type {boolean} */
@@ -797,6 +806,8 @@ export class AIForm extends VoiceMixin(AIElement) {
         noExtractableInputs:
           'Este formulario no tiene campos marcados con ai-extract, así que no puedo rellenarlo por ti.',
         error: 'Ha fallado la llamada a la IA. Vuelve a intentarlo.',
+        confirmAck: (val) => `Hecho, lo apunto: ${val}.`,
+        denyAck: () => 'Vale, dímelo otra vez.',
         formatErrors: {
           'nif-missing-letter': (_n, _v, ctx) =>
             `Te falta la letra de control. Tu DNI sería ${ctx?.suggestion ?? ''}. ¿Me lo confirmas?`,
@@ -869,6 +880,8 @@ export class AIForm extends VoiceMixin(AIElement) {
       noExtractableInputs:
         "This form has no fields marked with ai-extract, so I can't fill it in for you.",
       error: 'The AI call failed. Please try again.',
+      confirmAck: (val) => `Got it: ${val}.`,
+      denyAck: () => 'OK, tell me again.',
       formatErrors: {
         'nif-missing-letter': (_n, _v, ctx) =>
           `The control letter is missing. Your DNI would be ${ctx?.suggestion ?? ''}. Is that right?`,
@@ -1021,7 +1034,259 @@ export class AIForm extends VoiceMixin(AIElement) {
       }
       return null;
     }
-    return { name: raw, fn };
+    return { name: raw, fn, normalize: resolveNormalizer(raw) };
+  }
+
+  /**
+   * Regex patterns by `ai-format` alias. Used by the pre-pass to extract
+   * obvious values directly from the user's message without going through
+   * the AI. The match group 0 is normalised + validated downstream, so a
+   * loose pattern is fine.
+   * @returns {Record<string, RegExp>}
+   */
+  _heuristicPatterns() {
+    // Pattern keys are lowercase to match the dispatch convention
+    // (`validate(name)` is case-insensitive). Aliases share the same regex.
+    const phone = /(?:\+?34[\s-]*|0034[\s-]*)?[67](?:[\s-]*\d){8}\b/;
+    const phone9 = /(?:\+?34[\s-]*|0034[\s-]*)?\d(?:[\s-]*\d){8}\b/;
+    const ccc = /\b\d(?:[\s-]*\d){19}\b/;
+    const card = /\b\d(?:[\s.-]*\d){15}\b/;
+    return {
+      email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}\b/,
+      correo: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}\b/,
+      mobilees: phone,
+      movil: phone,
+      mobile: phone,
+      nummovil: phone,
+      landlinees: phone9,
+      fijo: phone9,
+      numfijo: phone9,
+      landphone: phone9,
+      telephonees: phone9,
+      telephone: phone9,
+      telefono: phone9,
+      tel: phone9,
+      nif: /\b\d{8}[A-Za-z]?\b/,
+      nie: /\b(?:[XYZxyz]\d{7}[A-Za-z]?|[Tt][A-Za-z0-9]{8})\b/,
+      cif: /\b[ABCDEFGHJNPQRSUVWabcdefghjnpqrsuvw]\d{7}[A-Za-z0-9]\b/,
+      bankaccountes: ccc,
+      cuentabancaria: ccc,
+      accountnumber: ccc,
+      creditcard: card,
+      tarjetacredito: card,
+      postalcodees: /\b\d{5}\b/,
+      cp: /\b\d{5}\b/,
+      postalcode: /\b\d{5}\b/,
+      url: /\bhttps?:\/\/[^\s]+/,
+      iccid: /\b89\d{17,18}\b/,
+    };
+  }
+
+  /**
+   * True when `text` looks like a yes-confirmation in `language`'s most
+   * common forms. Conservative: short messages only (avoids matching "sí
+   * pero…" mid-correction).
+   * @param {string} text
+   * @returns {boolean}
+   */
+  _isAffirmation(text) {
+    const t = text
+      .trim()
+      .toLowerCase()
+      .replace(/[.!,]+$/, '');
+    if (t.length === 0 || t.length > 25) return false;
+    const yeses = new Set([
+      'sí',
+      'si',
+      'sí es',
+      'si es',
+      'sí correcto',
+      'si correcto',
+      'correcto',
+      'exacto',
+      'eso es',
+      'ok',
+      'okay',
+      'vale',
+      'yes',
+      'y',
+      'yep',
+      'yeah',
+      'right',
+      "that's right",
+      'thats right',
+      'confirmo',
+      'confirma',
+      'confirmado',
+    ]);
+    return yeses.has(t);
+  }
+
+  /**
+   * True when `text` looks like a no-denial. Same conservative criteria.
+   * @param {string} text
+   * @returns {boolean}
+   */
+  _isNegation(text) {
+    const t = text
+      .trim()
+      .toLowerCase()
+      .replace(/[.!,]+$/, '');
+    if (t.length === 0 || t.length > 25) return false;
+    const noes = new Set([
+      'no',
+      'no es',
+      'no es eso',
+      'incorrecto',
+      'erróneo',
+      'erroneo',
+      'nope',
+      'negative',
+      'wrong',
+    ]);
+    return noes.has(t);
+  }
+
+  /**
+   * Apply a pending confirmation: write the suggested value to its field,
+   * clear the suggestion, push an ack assistant bubble and emit
+   * `ai-confirmation-applied`.
+   * @returns {boolean}
+   */
+  _applyPendingConfirmation() {
+    const pending = this._pendingConfirmation;
+    if (!pending) return false;
+    // Find the target element via the slotted form. Avoid CSS.escape since
+    // jsdom doesn't always expose it.
+    const { aiCandidates, manualFields } = this._classifyFields();
+    const candidate =
+      aiCandidates.find((f) => f.name === pending.field) ||
+      manualFields.find((f) => f.name === pending.field);
+    const el = candidate ? candidate.element : null;
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
+      this._pendingConfirmation = null;
+      return false;
+    }
+    if (typeof el.setCustomValidity === 'function') el.setCustomValidity('');
+    el.value = pending.value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    this.dispatchEvent(
+      new CustomEvent('ai-field-extracted', {
+        bubbles: true,
+        composed: true,
+        detail: { name: pending.field, value: pending.value, source: 'confirmation' },
+      }),
+    );
+    this.dispatchEvent(
+      new CustomEvent('ai-confirmation-applied', {
+        bubbles: true,
+        composed: true,
+        detail: { ...pending },
+      }),
+    );
+    const t = this._templates();
+    const ack = t.confirmAck ? t.confirmAck(pending.value) : `Hecho.`;
+    this._messages = [...this._messages, { role: 'assistant', text: ack }];
+    this._pendingConfirmation = null;
+    return true;
+  }
+
+  /**
+   * Drop a pending confirmation after a denial; push a re-ask assistant
+   * bubble.
+   * @returns {boolean}
+   */
+  _dropPendingConfirmation() {
+    if (!this._pendingConfirmation) return false;
+    const t = this._templates();
+    const re = t.denyAck ? t.denyAck(this._pendingConfirmation.field) : 'Vale, dímelo otra vez.';
+    this._messages = [...this._messages, { role: 'assistant', text: re }];
+    this._pendingConfirmation = null;
+    return true;
+  }
+
+  /**
+   * Heuristic pre-pass: for every AI-candidate that declares an `ai-format`
+   * with a known regex pattern, try to extract a substring from the user's
+   * message and write it (normalised + validated) directly. Returns the set
+   * of fields written and the leftover text (with consumed substrings
+   * removed) so the AI can focus on what's still ambiguous.
+   * @param {string} text
+   * @param {ExtractableField[]} candidates
+   * @returns {{ writtenNames: string[], leftover: string }}
+   */
+  _runHeuristicPrePass(text, candidates) {
+    const patterns = this._heuristicPatterns();
+    /** @type {string[]} */
+    const writtenNames = [];
+    /** @type {Array<{ name: string, format: string, value: string }>} */
+    const diagnosticRejects = [];
+    let leftover = text;
+
+    for (const field of candidates) {
+      // Skip already-filled fields — the user might be re-stating but we
+      // don't want to overwrite confirmed data unless explicitly asked.
+      if (this._fieldHasValue(field.element)) continue;
+      const validator = this._resolveFormatValidator(field.element);
+      if (!validator) continue;
+      const pattern = patterns[validator.name.toLowerCase()];
+      if (!pattern) continue;
+      const match = leftover.match(pattern);
+      if (!match) continue;
+      const raw = match[0];
+      const canonical = this._canonicalize(raw, validator);
+
+      if (validator.fn(canonical)) {
+        // Valid: write the canonical form.
+        if (typeof field.element.setCustomValidity === 'function') {
+          field.element.setCustomValidity('');
+        }
+        field.element.value = canonical;
+        field.element.dispatchEvent(new Event('input', { bubbles: true }));
+        field.element.dispatchEvent(new Event('change', { bubbles: true }));
+        this.dispatchEvent(
+          new CustomEvent('ai-field-extracted', {
+            bubbles: true,
+            composed: true,
+            detail: { name: field.name, value: canonical, source: 'heuristic' },
+          }),
+        );
+        writtenNames.push(field.name);
+        leftover = leftover.replace(raw, ' ').replace(/\s+/g, ' ').trim();
+      } else {
+        // Invalid but matched: try a diagnostic. If we can suggest a fix
+        // (e.g. compute the missing NIF control letter), surface it now
+        // and consume the substring so the AI doesn't see it.
+        const diag = this._diagnoseFormatFailure(validator.name, canonical);
+        if (diag && diag.suggestion) {
+          diagnosticRejects.push({
+            name: field.name,
+            format: validator.name,
+            value: canonical,
+          });
+          leftover = leftover.replace(raw, ' ').replace(/\s+/g, ' ').trim();
+        }
+        // If no actionable diagnostic, leave the substring in place so
+        // the AI gets a chance to disambiguate.
+      }
+    }
+    return { writtenNames, leftover, diagnosticRejects };
+  }
+
+  /**
+   * Universal value canonicalization. Always trim. If the field has a
+   * known `ai-format`, also apply its paired normalizer (lowercase email,
+   * strip country code from phone, uppercase NIF, etc.).
+   * @param {string} value
+   * @param {{ name: string, normalize: (value: unknown) => string } | null} validator
+   * @returns {string}
+   */
+  _canonicalize(value, validator) {
+    if (validator && typeof validator.normalize === 'function') {
+      return validator.normalize(value);
+    }
+    return typeof value === 'string' ? value.trim() : String(value ?? '');
   }
 
   /**
@@ -1036,12 +1301,43 @@ export class AIForm extends VoiceMixin(AIElement) {
     // Push the user's message immediately so the chat feels responsive.
     this._messages = [...this._messages, { role: 'user', text }];
     this._chatInput = '';
+    // Yield two microtasks so callers (including tests) that register
+    // event listeners right after triggering the send button see the
+    // events emitted by the synchronous pre-pass. One yield is consumed
+    // by the caller's own promise resolution; we need a second one so the
+    // caller's continuation (which usually does the listener registration)
+    // runs before our pre-pass.
+    await Promise.resolve();
+    await Promise.resolve();
     /**
      * If we push a contextual assistant message ourselves (rejection,
      * no-match, error), suppress the generic afterUserTurn refresh so the
      * user doesn't see two near-identical bubbles.
      */
     let suppressAfterUserTurnPush = false;
+
+    // CONFIRMATION SHORT-CIRCUIT — if there is a pending suggestion (e.g.
+    // computed NIF letter) and the user replies "sí" / "no", apply or
+    // drop without going through pre-pass or AI.
+    if (this._pendingConfirmation) {
+      this._suppressChatStateUpdates = true;
+      try {
+        if (this._isAffirmation(text)) {
+          this._applyPendingConfirmation();
+          return;
+        }
+        if (this._isNegation(text)) {
+          this._dropPendingConfirmation();
+          suppressAfterUserTurnPush = true;
+          return;
+        }
+        // Anything else: drop the pending suggestion silently, fall
+        // through to the regular flow so we don't accept stale state.
+        this._pendingConfirmation = null;
+      } finally {
+        this._suppressChatStateUpdates = false;
+      }
+    }
 
     const { aiCandidates } = this._classifyFields();
     if (aiCandidates.length === 0) {
@@ -1056,12 +1352,72 @@ export class AIForm extends VoiceMixin(AIElement) {
         ...this._messages,
         { role: 'assistant', text: this._templates().noExtractableInputs },
       ];
+      suppressAfterUserTurnPush = true;
       return;
     }
     this._chatBusy = true;
     this._suppressChatStateUpdates = true;
     try {
-      const response = await promptApi(this._buildExtractionPrompt(text, aiCandidates));
+      // PHASE 1 — Deterministic pre-pass: try regex extraction for every
+      // ai-format-tagged candidate before involving the AI. If the message
+      // is just clean data ("mi telefono es 639 01 89 87"), the AI never
+      // needs to be invoked.
+      const prepass = this._runHeuristicPrePass(text, aiCandidates);
+
+      // If the pre-pass diagnosed any field (e.g. NIF without letter →
+      // suggest the computed letter), emit the rejection event + push the
+      // assistant message + arm the confirmation state, all without
+      // touching the AI.
+      if (prepass.diagnosticRejects.length > 0) {
+        this.dispatchEvent(
+          new CustomEvent('ai-extraction-rejected', {
+            bubbles: true,
+            composed: true,
+            detail: { fields: prepass.diagnosticRejects, stage: 'prepass' },
+          }),
+        );
+        const t = this._templates();
+        const lines = prepass.diagnosticRejects.map((r) =>
+          this._formatErrorMessage(t, r.format, r.name, r.value),
+        );
+        const firstWithSuggestion = prepass.diagnosticRejects
+          .map((r) => ({ r, diag: this._diagnoseFormatFailure(r.format, r.value) }))
+          .find(({ diag }) => diag && diag.suggestion);
+        if (firstWithSuggestion) {
+          this._pendingConfirmation = {
+            field: firstWithSuggestion.r.name,
+            value: firstWithSuggestion.diag.suggestion,
+            format: firstWithSuggestion.r.format,
+          };
+        }
+        this._messages = [...this._messages, { role: 'assistant', text: lines.join(' ') }];
+        suppressAfterUserTurnPush = true;
+        return;
+      }
+
+      const remainingCandidates = aiCandidates.filter(
+        (f) => !prepass.writtenNames.includes(f.name),
+      );
+
+      // If the pre-pass already handled every still-pending candidate
+      // there's no point invoking the AI: nothing left to extract.
+      if (remainingCandidates.length === 0) {
+        // The state machine pushes the follow-up assistant message.
+        return;
+      }
+      // If pre-pass extracted everything it could AND the leftover is
+      // empty / pure filler, still skip the AI — we don't want it to
+      // hallucinate from connectors like "es", "mi" or whitespace.
+      const leftoverText = prepass.leftover.trim();
+      if (prepass.writtenNames.length > 0 && leftoverText.length < 4) {
+        return;
+      }
+
+      // PHASE 2 — AI fallback: send the leftover text to the model so it
+      // can interpret the natural-language remainder.
+      const response = await promptApi(
+        this._buildExtractionPrompt(leftoverText, remainingCandidates),
+      );
       const parsed = this._parseJsonResponse(response);
       if (!parsed || Object.keys(parsed).length === 0) {
         this.dispatchEvent(
@@ -1103,30 +1459,32 @@ export class AIForm extends VoiceMixin(AIElement) {
       const extracted = [];
       /** @type {Array<{ name: string, format: string, value: string }>} */
       const rejected = [];
-      for (const field of aiCandidates) {
+      for (const field of remainingCandidates) {
         const value = parsed[field.name];
         if (value == null || value === '') continue;
-        const str = String(value);
-        // Deterministic format check before writing the value.
         const validator = this._resolveFormatValidator(field.element);
-        if (validator && !validator.fn(str)) {
-          rejected.push({ name: field.name, format: validator.name, value: str });
+        // Always canonicalize: trim universal + format-specific normalize
+        // (strip country code, lowercase email, uppercase NIF, etc.).
+        const canonical = this._canonicalize(String(value), validator);
+        // Deterministic format check on the CANONICAL form.
+        if (validator && !validator.fn(canonical)) {
+          rejected.push({ name: field.name, format: validator.name, value: canonical });
           continue;
         }
         if (typeof field.element.setCustomValidity === 'function') {
           field.element.setCustomValidity('');
         }
-        field.element.value = str;
+        field.element.value = canonical;
         field.element.dispatchEvent(new Event('input', { bubbles: true }));
         field.element.dispatchEvent(new Event('change', { bubbles: true }));
         this.dispatchEvent(
           new CustomEvent('ai-field-extracted', {
             bubbles: true,
             composed: true,
-            detail: { name: field.name, value: str },
+            detail: { name: field.name, value: canonical },
           }),
         );
-        extracted.push({ name: field.name, value: str });
+        extracted.push({ name: field.name, value: canonical });
       }
 
       if (rejected.length > 0) {
@@ -1139,6 +1497,19 @@ export class AIForm extends VoiceMixin(AIElement) {
         );
         const t = this._templates();
         const lines = rejected.map((r) => this._formatErrorMessage(t, r.format, r.name, r.value));
+        // If the diagnostic produced a concrete suggestion (e.g. a
+        // computed NIF letter), remember it so a "sí" in the next turn
+        // applies it without round-tripping through the AI.
+        const firstWithSuggestion = rejected
+          .map((r) => ({ r, diag: this._diagnoseFormatFailure(r.format, r.value) }))
+          .find(({ diag }) => diag && diag.suggestion);
+        if (firstWithSuggestion) {
+          this._pendingConfirmation = {
+            field: firstWithSuggestion.r.name,
+            value: firstWithSuggestion.diag.suggestion,
+            format: firstWithSuggestion.r.format,
+          };
+        }
         this._messages = [...this._messages, { role: 'assistant', text: lines.join(' ') }];
         suppressAfterUserTurnPush = true;
       } else if (extracted.length === 0) {
@@ -1394,15 +1765,22 @@ export class AIForm extends VoiceMixin(AIElement) {
       }
       const validator = this._resolveFormatValidator(c);
       if (!validator) continue;
-      const value = typeof c.value === 'string' ? c.value : '';
-      if (value === '') continue; // presence is the `required` attribute's job
-      if (validator.fn(value)) {
+      const raw = typeof c.value === 'string' ? c.value : '';
+      if (raw === '') continue; // presence is the `required` attribute's job
+      // Canonicalize manual edits too — '+34 639 01 89 87' → '639018987'.
+      const canonical = this._canonicalize(raw, validator);
+      if (canonical !== raw) {
+        c.value = canonical;
+        c.dispatchEvent(new Event('input', { bubbles: true }));
+        c.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (validator.fn(canonical)) {
         if (typeof c.setCustomValidity === 'function') c.setCustomValidity('');
       } else {
         const t = this._templates();
-        const msg = this._formatErrorMessage(t, validator.name, c.name, value);
+        const msg = this._formatErrorMessage(t, validator.name, c.name, canonical);
         if (typeof c.setCustomValidity === 'function') c.setCustomValidity(msg);
-        failures.push({ name: c.name, format: validator.name, value });
+        failures.push({ name: c.name, format: validator.name, value: canonical });
       }
     }
     if (failures.length === 0) return true;
