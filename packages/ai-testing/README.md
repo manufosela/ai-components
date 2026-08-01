@@ -46,4 +46,4 @@ it('prompt() returns the mocked response', async () => {
 
 ## License
 
-MIT © Mánu Fosela
+MIT © manufosela
