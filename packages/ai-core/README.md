@@ -57,4 +57,4 @@ No adapter abstraction. No fallback backend. The component decides at mount time
 
 ## License
 
-MIT © Mánu Fosela
+MIT © manufosela

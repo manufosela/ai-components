@@ -58,4 +58,4 @@ Core infrastructure + first component `<ai-form>` + docs site + first npm releas
 
 ## License
 
-MIT © Mánu Fosela
+MIT © manufosela

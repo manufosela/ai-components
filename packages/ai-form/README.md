@@ -153,4 +153,4 @@ Inherits `ai-ready` / `ai-unavailable` / `ai-download-*` from [`AIElement`](../a
 
 ## License
 
-MIT © Mánu Fosela
+MIT © manufosela

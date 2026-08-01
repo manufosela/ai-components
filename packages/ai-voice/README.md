@@ -54,4 +54,4 @@ customElements.define('voice-demo', VoiceDemo);
 
 ## License
 
-MIT © Mánu Fosela
+MIT © manufosela
